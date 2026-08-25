@@ -1,5 +1,5 @@
 export const STARKNET_RPC_URL =
-  process.env.STARKNET_RPC_URL ?? "https://rpc.starknet.lava.build:443/rpc/v0_9";
+  process.env.STARKNET_RPC_URL || "https://rpc.starknet.lava.build:443/rpc/v0_9";
 export const STARKNET_CHAIN_ID = process.env.STARKNET_CHAIN_ID ?? "0x534e5f4d41494e";
 export const STRK20_POOL_ADDRESS =
   process.env.STRK20_POOL_ADDRESS ??
