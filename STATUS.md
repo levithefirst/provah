@@ -5,7 +5,7 @@ Last updated: 2026-08-25
 ## Confirmed facts (from official sources)
 - STRK20 privacy pool is live on Starknet mainnet at
   `0x040337b1af3c663e86e333bab5a4b28da8d4652a15a69beee2b677776ffe812a`
-  (chain `SN_MAIN`, RPC `https://rpc.starknet.lava.build`).
+  (chain `SN_MAIN`, RPC `https://rpc.starknet.lava.build:443/rpc/v0_9`).
 - Real, working TypeScript SDK: `@starkware-libs/starknet-privacy-sdk`
   (github.com/starkware-libs/starknet-privacy). No public npm registry
   publish found — built from source and vendored into `vendor/` (Apache-2.0,

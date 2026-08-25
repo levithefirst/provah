@@ -18,7 +18,7 @@ import { Account, RpcProvider, CallData, Contract, cairo, hash, ec } from "stark
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
-const RPC_URL = process.env.STARKNET_RPC_URL ?? "https://rpc.starknet.lava.build";
+const RPC_URL = process.env.STARKNET_RPC_URL ?? "https://rpc.starknet.lava.build:443/rpc/v0_9";
 const ACCOUNT_ADDRESS = requireEnv("STARKNET_ACCOUNT_ADDRESS");
 const PRIVATE_KEY = requireEnv("STARKNET_PRIVATE_KEY");
 
