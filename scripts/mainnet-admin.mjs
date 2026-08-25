@@ -59,15 +59,13 @@ async function cmdBalance() {
   const p = provider();
   const STRK = "0x04718f5a0fc34cc1af16a1cdee98ffb20c31f5cd61d6ab07201858f4287c938";
   const ETH = "0x049d36570d4e46f48e99674bd3fcc84644ddd6b96f7c741b1562b82f9e004dc7";
-  const nonce = await p
-    .getNonceForAddress(ACCOUNT_ADDRESS)
-    .catch((e) => `error: ${e.message.slice(0, 200)}`);
+  const nonce = await p.getNonceForAddress(ACCOUNT_ADDRESS).catch((e) => `error: ${trimError(e)}`);
   const strkBal = await p
     .callContract({ contractAddress: STRK, entrypoint: "balanceOf", calldata: [ACCOUNT_ADDRESS] })
-    .catch((e) => [`error: ${e.message.slice(0, 200)}`]);
+    .catch((e) => [`error: ${trimError(e)}`]);
   const ethBal = await p
     .callContract({ contractAddress: ETH, entrypoint: "balanceOf", calldata: [ACCOUNT_ADDRESS] })
-    .catch((e) => [`error: ${e.message.slice(0, 200)}`]);
+    .catch((e) => [`error: ${trimError(e)}`]);
   console.log("account:", ACCOUNT_ADDRESS);
   console.log("nonce:", nonce);
   console.log("STRK balance (low,high):", strkBal[0], strkBal[1]);
