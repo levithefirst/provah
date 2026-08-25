@@ -14,7 +14,7 @@
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
-import { Account, RpcProvider, CallData, Contract, cairo, hash, ec } from "starknet";
+import { Account, RpcProvider, CallData, Contract, cairo, hash, ec, constants } from "starknet";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -37,7 +37,13 @@ function provider() {
 }
 
 function account() {
-  return new Account({ provider: provider(), address: ACCOUNT_ADDRESS, signer: PRIVATE_KEY, cairoVersion: "1" });
+  return new Account({
+    provider: provider(),
+    address: ACCOUNT_ADDRESS,
+    signer: PRIVATE_KEY,
+    cairoVersion: "1",
+    chainId: constants.StarknetChainId.SN_MAIN,
+  });
 }
 
 function attesterPublicKey() {
@@ -78,6 +84,13 @@ async function cmdDeploy() {
   const casm = JSON.parse(readFileSync(join(__dirname, "../src/contracts/prova_pass.casm.json"), "utf-8"));
   const acc = account();
   const p = provider();
+
+  const chainId = await p.getChainId();
+  const specVersion = await p.getSpecVersion();
+  console.log("chainId:", chainId, "specVersion:", specVersion);
+  if (chainId !== "0x534e5f4d41494e") {
+    throw new Error(`refusing to declare: RPC reports chainId ${chainId}, expected mainnet 0x534e5f4d41494e`);
+  }
 
   console.log("Declaring ProvaPass...");
   const declareResult = await acc.declare({ contract: sierra, casm });
