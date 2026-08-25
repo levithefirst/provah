@@ -1,0 +1,56 @@
+name: Mainnet admin action
+
+on:
+  workflow_dispatch:
+    inputs:
+      action:
+        description: "Action to run"
+        required: true
+        type: choice
+        options:
+          - deploy
+          - create-campaign
+          - claim
+      arg1:
+        description: "create-campaign: name | claim: campaignId"
+        required: false
+      arg2:
+        description: "create-campaign: asset address | claim: nullifier"
+        required: false
+      arg3:
+        description: "create-campaign: minAmount | claim: recipient"
+        required: false
+      arg4:
+        description: "create-campaign: minDays"
+        required: false
+      arg5:
+        description: "create-campaign: rewardToken"
+        required: false
+      arg6:
+        description: "create-campaign: rewardAmount"
+        required: false
+      arg7:
+        description: "create-campaign: expiryDays"
+        required: false
+
+jobs:
+  run:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm install starknet@10.5.0
+      - name: Run action
+        env:
+          STARKNET_RPC_URL: ${{ secrets.STARKNET_RPC_URL }}
+          STARKNET_ACCOUNT_ADDRESS: ${{ secrets.STARKNET_ACCOUNT_ADDRESS }}
+          STARKNET_PRIVATE_KEY: ${{ secrets.STARKNET_PRIVATE_KEY }}
+          PROVA_ATTESTER_PRIVATE_KEY: ${{ secrets.PROVA_ATTESTER_PRIVATE_KEY }}
+          PROVA_ATTESTER_PUBLIC_KEY: ${{ secrets.PROVA_ATTESTER_PUBLIC_KEY }}
+          PROVA_PASS_CONTRACT_ADDRESS: ${{ secrets.PROVA_PASS_CONTRACT_ADDRESS }}
+        run: |
+          node scripts/mainnet-admin.mjs "${{ inputs.action }}" \
+            "${{ inputs.arg1 }}" "${{ inputs.arg2 }}" "${{ inputs.arg3 }}" \
+            "${{ inputs.arg4 }}" "${{ inputs.arg5 }}" "${{ inputs.arg6 }}" "${{ inputs.arg7 }}"

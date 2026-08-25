@@ -48,3 +48,6 @@ smoke.mjs
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# generated secrets (never commit)
+.attester-keypair.txt
