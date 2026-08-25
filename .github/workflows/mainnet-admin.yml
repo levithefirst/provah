@@ -11,6 +11,7 @@ on:
           - deploy
           - create-campaign
           - claim
+          - balance
       arg1:
         description: "create-campaign: name | claim: campaignId"
         required: false

@@ -55,6 +55,23 @@ function signAttestation(campaignId, nullifier, recipient) {
   return { r: "0x" + sig.r.toString(16), s: "0x" + sig.s.toString(16) };
 }
 
+async function cmdBalance() {
+  const p = provider();
+  const STRK = "0x04718f5a0fc34cc1af16a1cdee98ffb20c31f5cd61d6ab07201858f4287c938";
+  const ETH = "0x049d36570d4e46f48e99674bd3fcc84644ddd6b96f7c741b1562b82f9e004dc7";
+  const nonce = await p.getNonce(ACCOUNT_ADDRESS).catch((e) => `error: ${e.message.slice(0, 200)}`);
+  const strkBal = await p
+    .callContract({ contractAddress: STRK, entrypoint: "balanceOf", calldata: [ACCOUNT_ADDRESS] })
+    .catch((e) => [`error: ${e.message.slice(0, 200)}`]);
+  const ethBal = await p
+    .callContract({ contractAddress: ETH, entrypoint: "balanceOf", calldata: [ACCOUNT_ADDRESS] })
+    .catch((e) => [`error: ${e.message.slice(0, 200)}`]);
+  console.log("account:", ACCOUNT_ADDRESS);
+  console.log("nonce:", nonce);
+  console.log("STRK balance (low,high):", strkBal[0], strkBal[1]);
+  console.log("ETH balance (low,high):", ethBal[0], ethBal[1]);
+}
+
 async function cmdDeploy() {
   const sierra = JSON.parse(readFileSync(join(__dirname, "../src/contracts/prova_pass.sierra.json"), "utf-8"));
   const casm = JSON.parse(readFileSync(join(__dirname, "../src/contracts/prova_pass.casm.json"), "utf-8"));
@@ -132,7 +149,7 @@ async function cmdClaim() {
 }
 
 const action = process.argv[2];
-const handlers = { deploy: cmdDeploy, "create-campaign": cmdCreateCampaign, claim: cmdClaim };
+const handlers = { deploy: cmdDeploy, "create-campaign": cmdCreateCampaign, claim: cmdClaim, balance: cmdBalance };
 const handler = handlers[action];
 if (!handler) {
   console.error(`Unknown action "${action}". Use one of: ${Object.keys(handlers).join(", ")}`);
