@@ -39,6 +39,16 @@ See README "What is private / what is not" for the full reasoning. Summary:
   ECDSA check + nullifier registry — only the predicate evaluation is a
   server attestation rather than a client-side ZK proof.
 
+## Live diagnostic (2026-08-25, via `mainnet-admin.yml` → `balance` action)
+`STARKNET_ACCOUNT_ADDRESS` (`0x031676cdcf7fbfd07e73c420780d4efb51ba8778dc1c29db0c9527d1dd9a4a07`)
+is **not deployed on Starknet mainnet** — `starknet_getNonce` returns
+`"Contract not found"` and its ETH balance is `0x0`. This, not a missing
+env var, is why the `deploy` action's declare transaction failed
+(`Account validation failed: ... exceed balance (0)`). Needs: STRK (or
+ETH) sent to that address on mainnet, and a `deploy_account` transaction
+(automatic on first send from Argent X / Braavos with the same private
+key, or can be submitted directly once funded).
+
 ## Progress
 - [x] Repo scaffold (Next.js/TS/Tailwind, App Router)
 - [x] Cairo `ProvaPass` contract written + compiles (Scarb 2.9.2)
