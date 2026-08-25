@@ -12,6 +12,7 @@ on:
           - create-campaign
           - claim
           - balance
+          - check-owner
       arg1:
         description: "create-campaign: name | claim: campaignId"
         required: false

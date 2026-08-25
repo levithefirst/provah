@@ -94,6 +94,18 @@ async function cmdBalance() {
   console.log("ETH balance (low,high):", ethBal[0], ethBal[1]);
 }
 
+async function cmdCheckOwner() {
+  const p = provider();
+  const derivedPubkey = ec.starkCurve.getStarkKey(PRIVATE_KEY);
+  console.log("derived pubkey from STARKNET_PRIVATE_KEY:", derivedPubkey);
+  for (const entrypoint of ["get_owner", "getOwner", "owner", "get_owners", "getGuardian", "get_guardian"]) {
+    const result = await p
+      .callContract({ contractAddress: ACCOUNT_ADDRESS, entrypoint, calldata: [] })
+      .catch((e) => [`error: ${trimError(e)}`]);
+    console.log(entrypoint, "->", JSON.stringify(result));
+  }
+}
+
 async function cmdDeploy() {
   const sierra = JSON.parse(readFileSync(join(__dirname, "../src/contracts/prova_pass.sierra.json"), "utf-8"));
   const casm = JSON.parse(readFileSync(join(__dirname, "../src/contracts/prova_pass.casm.json"), "utf-8"));
@@ -178,7 +190,13 @@ async function cmdClaim() {
 }
 
 const action = process.argv[2];
-const handlers = { deploy: cmdDeploy, "create-campaign": cmdCreateCampaign, claim: cmdClaim, balance: cmdBalance };
+const handlers = {
+  deploy: cmdDeploy,
+  "create-campaign": cmdCreateCampaign,
+  claim: cmdClaim,
+  balance: cmdBalance,
+  "check-owner": cmdCheckOwner,
+};
 const handler = handlers[action];
 if (!handler) {
   console.error(`Unknown action "${action}". Use one of: ${Object.keys(handlers).join(", ")}`);
