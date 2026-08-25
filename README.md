@@ -133,7 +133,7 @@ GitHub Actions secrets on this repo, or as Vercel project env vars):
 
 # or locally, with the env vars exported:
 node scripts/mainnet-admin.mjs deploy
-node scripts/mainnet-admin.mjs create-campaign "STRK Loyalty Drop" 0x04718f5a0fc34cc1af16a1cdee98ffb20c31f5cd61d6ab07201858f4287c938 1000000000000000000 7
+node scripts/mainnet-admin.mjs create-campaign "STRK Loyalty Drop" 0x04718f5a0fc34cc1af16a1cdee98ffb20c31f5cd61d6ab07201858f4287c938d 1000000000000000000 7
 ```
 
 ## Mainnet transactions

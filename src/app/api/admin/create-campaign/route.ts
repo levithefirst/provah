@@ -20,7 +20,7 @@ export async function GET(req: NextRequest) {
     const description =
       sp.get("description") ??
       "Held >= X STRK for >= N days in the private pool? Claim from any wallet.";
-    const predicateAsset = sp.get("asset") ?? "0x04718f5a0fc34cc1af16a1cdee98ffb20c31f5cd61d6ab07201858f4287c938";
+    const predicateAsset = sp.get("asset") ?? "0x04718f5a0fc34cc1af16a1cdee98ffb20c31f5cd61d6ab07201858f4287c938d";
     const minAmount = BigInt(sp.get("minAmount") ?? "1000000000000000000"); // 1 STRK default
     const minDays = Number(sp.get("minDays") ?? "7");
     const rewardToken = sp.get("rewardToken") ?? predicateAsset;
