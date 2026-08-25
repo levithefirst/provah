@@ -66,6 +66,7 @@ async function cmdBalance() {
   const ethBal = await p
     .callContract({ contractAddress: ETH, entrypoint: "balanceOf", calldata: [ACCOUNT_ADDRESS] })
     .catch((e) => [`error: ${trimError(e)}`]);
+  console.log("rpc:", RPC_URL);
   console.log("account:", ACCOUNT_ADDRESS);
   console.log("nonce:", nonce);
   console.log("STRK balance (low,high):", strkBal[0], strkBal[1]);
