@@ -170,19 +170,20 @@ if (!handler) {
   process.exit(1);
 }
 function trimError(err) {
-  // starknet.js embeds the full request payload (e.g. the entire Sierra
-  // program array for a declare) into RpcError messages, which is large
-  // enough to blow past CI log line/size limits before the actual error
-  // code and message print. Keep only the head (params get cut) and any
-  // trailing "<code>: <message>" the RPC actually returned.
-  const msg = String(err?.message ?? err);
-  const head = msg.slice(0, 400);
-  const tailMatch = msg.match(/(-?\d+):\s*([^\n{][^\n]{0,300})$/);
-  return tailMatch ? `${head}\n...\n[trimmed]\n...\ncode ${tailMatch[1]}: ${tailMatch[2]}` : head;
+  // starknet.js's RpcError embeds the full request payload (e.g. the entire
+  // Sierra program array for a declare) into .message, which is large enough
+  // to blow past CI log line/size limits before the actual error prints. Use
+  // the structured .baseError {code, message, data} it exposes instead.
+  if (err?.baseError) {
+    return `code ${err.baseError.code}: ${err.baseError.message} ${JSON.stringify(err.baseError.data ?? "")}`;
+  }
+  return String(err?.message ?? err).slice(0, 500);
 }
 
 handler().catch((err) => {
   console.error(trimError(err));
-  if (err?.stack) console.error(err.stack.split("\n").slice(0, 5).join("\n"));
+  if (!err?.baseError && err?.stack) {
+    console.error(err.stack.split("\n").slice(0, 5).join("\n"));
+  }
   process.exit(1);
 });
