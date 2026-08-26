@@ -14,19 +14,7 @@
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
-import {
-  Account,
-  RpcProvider,
-  CallData,
-  Contract,
-  cairo,
-  hash,
-  ec,
-  constants,
-  CairoCustomEnum,
-  CairoOption,
-  CairoOptionVariant,
-} from "starknet";
+import { Account, RpcProvider, CallData, Contract, cairo, hash, ec, constants } from "starknet";
 
 /**
  * Standard OpenZeppelin single-signer account (no guardian), confirmed
@@ -173,9 +161,6 @@ async function cmdPoolRegisterViewingKey({ dryRun }) {
     throw new Error(`refusing to submit: RPC reports chainId ${chainId}, expected mainnet`);
   }
 
-  const cls = await p.getClassAt(POOL_ADDRESS);
-  const poolAbi = cls.abi;
-
   const messageHash = hash.starknetKeccak(`${chainId}:${POOL_ADDRESS}`);
   const sig = ec.starkCurve.sign(BigInt(messageHash).toString(16).padStart(64, "0"), PRIVATE_KEY);
   const folded = BigInt(hash.computePoseidonHashOnElements([sig.r.toString(), sig.s.toString()]));
@@ -184,31 +169,24 @@ async function cmdPoolRegisterViewingKey({ dryRun }) {
 
   console.log("derived viewing pubkey:", publicKey);
 
-  const contract = new Contract({ abi: poolAbi, address: POOL_ADDRESS, providerOrAccount: acc });
-
-  // starknet.js needs every ServerAction variant name present (undefined for
-  // the inactive ones) to identify which one is active and how to encode it.
-  const action = new CairoCustomEnum({
-    WriteOnce: undefined,
-    Append: undefined,
-    TransferFrom: undefined,
-    TransferTo: undefined,
-    EmitViewingKeySet: {
-      user_addr: ACCOUNT_ADDRESS,
-      public_key: publicKey,
-      enc_private_key: "0x0",
-    },
-    EmitWithdrawal: undefined,
-    EmitDeposit: undefined,
-    EmitOpenNoteCreated: undefined,
-    EmitEncNoteCreated: undefined,
-    EmitNoteUsed: undefined,
-    Invoke: undefined,
-    InvokeWithComputation: undefined,
-  });
-  const screening = new CairoOption(CairoOptionVariant.None);
-
-  const call = contract.populate("apply_actions", [[action], screening]);
+  // starknet.js's ABI-driven CairoCustomEnum-inside-Span serialization kept
+  // failing ("Missing parameter for type core::felt252") on this ABI shape,
+  // so the calldata is built by hand instead — Cairo 1 encodes a custom
+  // enum as [variant_index, ...variant fields], a Span<T> as [len, ...T],
+  // and Option::None as [1] (core::option::Option's variant order is
+  // Some=0, None=1, matching starknet.js's own CairoOptionVariant).
+  // ServerAction variant order, from the pool's own ABI: WriteOnce(0),
+  // Append(1), TransferFrom(2), TransferTo(3), EmitViewingKeySet(4), ...
+  const EMIT_VIEWING_KEY_SET_VARIANT = 4;
+  const calldata = [
+    "0x1", // actions: Span<ServerAction>, length 1
+    EMIT_VIEWING_KEY_SET_VARIANT.toString(),
+    ACCOUNT_ADDRESS, // ViewingKeySet.user_addr
+    publicKey, // ViewingKeySet.public_key
+    "0x0", // ViewingKeySet.enc_private_key — no backup provided
+    "0x1", // screening: Option<ScreeningAttestation>::None
+  ];
+  const call = { contractAddress: POOL_ADDRESS, entrypoint: "apply_actions", calldata };
 
   console.log("Estimating fee (dry run, no gas spent if this throws)...");
   const estimate = await acc.estimateFee(call);
