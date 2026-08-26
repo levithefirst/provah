@@ -17,16 +17,19 @@ export default function Home() {
         <Problem />
         <HowItWorks />
 
-        <section id="app" className="bg-neutral-950 py-24">
+        <section
+          id="app"
+          className="border-y border-neutral-200 bg-neutral-50 py-24 dark:border-neutral-800 dark:bg-neutral-950"
+        >
           <div className="mx-auto max-w-4xl px-6">
             <div className="mb-12 text-center">
-              <span className="text-xs font-semibold uppercase tracking-wider text-indigo-400">
+              <span className="text-xs font-semibold uppercase tracking-wider text-indigo-600 dark:text-indigo-400">
                 Live product
               </span>
-              <h2 className="mt-4 text-3xl font-semibold tracking-tight text-white sm:text-4xl">
+              <h2 className="mt-4 text-3xl font-semibold tracking-tight text-neutral-900 sm:text-4xl dark:text-white">
                 This is a real, working app
               </h2>
-              <p className="mx-auto mt-4 max-w-xl text-neutral-400">
+              <p className="mx-auto mt-4 max-w-xl text-neutral-600 dark:text-neutral-400">
                 Four live campaigns, real mainnet transactions, a gas-sponsored claim from any
                 wallet. Try it below, no setup required.
               </p>
