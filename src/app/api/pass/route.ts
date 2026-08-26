@@ -62,6 +62,22 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ ok: false, error: "pass already issued for this input" }, { status: 409 });
     }
 
+    // Deterministic (no salt) commitment of (address, campaign) — lets us
+    // enforce "one pass per wallet per campaign" without ever storing the
+    // raw address, closing the gap where a caller could otherwise mint
+    // unlimited passes for one qualifying wallet by varying `salt` alone.
+    const addressCommitment = "0x" + pedersen(BigInt(proverAddress), BigInt(campaignId)).toString(16);
+    const alreadyIssued = await db().query(
+      `SELECT 1 FROM prova_passes WHERE campaign_id = $1 AND address_commitment = $2`,
+      [campaignId, addressCommitment]
+    );
+    if (alreadyIssued.rows.length > 0) {
+      return NextResponse.json(
+        { ok: false, error: "this wallet has already been issued a pass for this campaign" },
+        { status: 409 }
+      );
+    }
+
     // Commitment only — never the raw prover address — so Prova itself can't
     // later be forced to reveal which wallet satisfied the predicate.
     const issuerCommitment = "0x" + pedersen(BigInt(proverAddress), BigInt(salt)).toString(16);
@@ -69,9 +85,9 @@ export async function POST(req: NextRequest) {
     const expiresAt = new Date(Number(campaign.expiry) * 1000);
 
     await db().query(
-      `INSERT INTO prova_passes (nullifier, campaign_id, predicate_hash, issuer_commitment, signature_r, signature_s, expires_at, bound_recipient)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
-      [nullifierHex, campaignId, campaign.predicate_hash, issuerCommitment, "0x0", "0x0", expiresAt, boundRecipient]
+      `INSERT INTO prova_passes (nullifier, campaign_id, predicate_hash, issuer_commitment, signature_r, signature_s, expires_at, bound_recipient, address_commitment)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
+      [nullifierHex, campaignId, campaign.predicate_hash, issuerCommitment, "0x0", "0x0", expiresAt, boundRecipient, addressCommitment]
     );
 
     return NextResponse.json({

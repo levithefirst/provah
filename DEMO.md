@@ -36,6 +36,11 @@ qualified."
 ## 0:50 – 1:25 — Generate the pass
 
 - Connect Wallet A on the "STRK Loyalty Drop" campaign.
+- Point out the **self-check** that appears immediately: "✅ You qualify."
+  Narrate: "that just ran entirely in my browser, against public RPC — the
+  exact same logic Prova's server uses, open-source, independently
+  re-derived. I don't have to trust Prova's yes/no, I just watched it
+  happen myself."
 - Click **Generate Prova Pass**. Narrate: Prova checks the predicate,
   derives a nullifier, hands back a pass — call out the hero visual (Wallet
   A → Pass → Wallet B) highlighting that the pass isn't tied to any
@@ -74,10 +79,14 @@ qualified."
 
 ## 2:20 – 2:40 — Redeem doesn't just record a claim, it can pay one out
 
-- Switch to the "STRK Welcome Reward" campaign. Generate and redeem a pass
-  the same way. Pull up the recipient's STRK balance on Starkscan before
-  and after: it goes from whatever it was to exactly `+0.05 STRK`, in the
-  same transaction that consumed the nullifier.
+- Switch to the "STRK Welcome Reward" campaign. Point at the reward-pool
+  balance shown live on the campaign card — "that's the contract's real
+  STRK balance, read from the chain right now; that number is the hard
+  cap on what this system could ever pay out, even in the worst case."
+- Generate and redeem a pass the same way. Pull up the recipient's STRK
+  balance on Starkscan before and after: it goes from whatever it was to
+  exactly `+0.05 STRK`, in the same transaction that consumed the
+  nullifier.
 - One line: "this isn't a special case — `claim_with_prova_pass` always had
   this payout path; we just funded the contract and pointed a campaign at
   it. Every reward campaign works exactly like this."

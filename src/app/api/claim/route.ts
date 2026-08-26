@@ -40,6 +40,14 @@ export async function POST(req: NextRequest) {
     if (pass.status !== "issued") {
       return NextResponse.json({ ok: false, error: `pass already ${pass.status}` }, { status: 409 });
     }
+    // The contract already enforces campaign expiry on-chain
+    // (`assert(get_block_timestamp() <= expiry)`), so this can't be
+    // bypassed even if this check were skipped — but checking here first
+    // avoids relaying a transaction we already know will revert, at
+    // Prova's own gas expense, for a stale pass.
+    if (new Date(pass.expires_at).getTime() < Date.now()) {
+      return NextResponse.json({ ok: false, error: "this pass has expired" }, { status: 410 });
+    }
     // If this pass was locked to one destination wallet at issuance, refuse
     // to attest a claim to any other recipient — enforced before signing,
     // not just documented as a bearer-security caveat.

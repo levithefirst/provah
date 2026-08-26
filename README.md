@@ -48,9 +48,12 @@ against the live mainnet privacy pool at
    are live on it right now: three predicate types (see "Multiple
    predicate types" below), plus one, "STRK Welcome Reward," that pays out
    a real 0.05 STRK on redeem instead of just recording a claim.
-2. **Connect wallet A** — a wallet with real STRK20 deposit history — and
-   click **Generate Prova Pass**. Prova checks the predicate against its
-   public deposit events and hands back a pass tied to a fresh nullifier.
+2. **Connect wallet A** — a wallet with real STRK20 deposit history. The
+   app immediately runs an independent, client-side eligibility check
+   against public RPC — watch it agree with the server before you even
+   click anything. Then click **Generate Prova Pass**: Prova checks the
+   same predicate against its public deposit events and hands back a pass
+   tied to a fresh nullifier.
 3. Copy the pass token, or just disconnect wallet A. **Connect wallet B** —
    any other wallet, funded or not — and click **Claim**. The transaction
    is gas-sponsored by Prova, so wallet B never needs to hold STRK.
@@ -115,6 +118,42 @@ receiving wallet is already known and the extra guarantee is worth losing
 transferability. Nothing about the unlocked path changes — this is
 strictly additive.
 
+## Eligibility, checked in your browser before Prova ever sees it
+
+The predicate check (see "The attester today" below for exactly why it's
+still a server attestation and not a ZK proof) is the one real trust
+boundary in this system. Everything that can be pushed out of that
+boundary without the missing prover has been:
+
+- **The client independently re-derives eligibility, from public data, on
+  its own.** The moment wallet A connects, the app runs the *exact same
+  computation* `src/lib/predicate.ts` performs server-side —
+  `clientEvaluatePredicate` in `src/app/ProvaApp.tsx` reads the pool's
+  public `Deposit` events straight from the browser's own RPC connection
+  and evaluates the same predicate arithmetic — before `/api/pass` is ever
+  called. The result ("✅ You qualify — 1.2 STRK found, need 1.0") is not a
+  preview of what Prova will say; it's an independent confirmation a judge
+  or a user can audit by reading the same open-source function and running
+  it themselves, against data neither Prova nor the user controls.
+- **Prova's server still receives the address** — that part can't be
+  removed without the blocked prover, since *someone* has to check real
+  chain history and only the caller can supply which address to check. But
+  it was already the practical minimum: the server takes one address as
+  input, computes over public data it fetches itself, and returns a
+  signed capability — never a wallet history dump, a viewing key, or a
+  private key. The client-side self-check above proves this is exactly
+  what happens: if Prova's server were reading anything else, its verdict
+  and the browser's independent verdict would disagree.
+- **One pass per wallet per campaign, enforced server-side.** Nullifiers
+  were previously derivable with a client-supplied `salt`, which meant a
+  single qualifying wallet could in principle request unlimited passes for
+  one campaign by varying the salt. `/api/pass` now also computes a
+  deterministic, salt-free `address_commitment = pedersen(address,
+  campaignId)` and rejects a second pass request for a commitment that's
+  already on file (`409`), enforced by a unique index on
+  `(campaign_id, address_commitment)` in Postgres. One real wallet, one
+  pass, per campaign — not bounded only by good faith.
+
 ## Verify it yourself
 
 Every claim is independently checkable without trusting Provah's UI at
@@ -131,13 +170,22 @@ all, straight from the browser's own public RPC connection
   shows the exact delta. "Redeem pays out a real reward" stops being an
   assertion in a status message and becomes a number the browser itself
   fetched from mainnet.
+- **The blast radius of a dishonest attestation is capped, and the cap is
+  live.** `ProvaPass` can never pay out more than it currently holds — the
+  campaign card for any reward campaign reads the contract's real STRK
+  balance client-side and shows it: "reward pool currently holds X STRK…
+  that is the hard cap on what any attestation, honest or not, could ever
+  pay out." If the attester's key were ever compromised, the maximum
+  possible damage is a public, checkable number, not an unbounded claim.
 
-Both checks reduce Provah's trust surface to exactly what "What is private
-/ what is not" already documents: the predicate evaluation is a signed
-attestation you have to trust; everything downstream of that signature —
-that a claim consumed a specific nullifier, that a reward moved a specific
-amount to a specific wallet — is independently auditable and never has to
-be taken on faith.
+All of this reduces Provah's trust surface to exactly what "What is
+private / what is not" documents, and no further: the predicate evaluation
+is a signed attestation you have to trust once (and can now watch the
+client independently agree with); everything downstream of that
+signature — that a wallet can only ever get one pass per campaign, that a
+claim consumed a specific nullifier, that a reward moved a specific amount
+to a specific wallet and could never have exceeded the funded balance — is
+independently auditable and never has to be taken on faith.
 
 ## The flow
 
@@ -168,7 +216,7 @@ the demo as a stronger privacy guarantee than it actually provides today.
 | **That a deposit into the pool happened, its amount, and the depositor's address** | **Public.** STRK20 deposits are screened and emit a public `Deposit` event (confirmed directly from the pool's Cairo source and the hackathon's Day-0 guide). Prova's predicate evaluators read this real, public event log — they are not reading anything private. |
 | **The claim transaction and the recipient wallet** | Public, and by construction **not linkable** to the depositor address above: the `ProvaPass` contract only ever sees `(campaign_id, nullifier, recipient, signature)`. The nullifier is a Pedersen hash of `(campaign_id, prover_address, salt)` computed off-chain — nothing about the prover address is recoverable from it on-chain. |
 | **The predicate check itself** | **This is the honest trust boundary, and it's temporary.** See "The attester today, and what replaces it" below. |
-| **Who Prova can link, operationally** | Prova's server sees the prover's address for the duration of the `/api/pass` request (to read its public deposits) but stores only a one-way Pedersen commitment of it, never the raw address — see `src/lib/attestation.ts`. |
+| **Who Prova can link, operationally** | Prova's server sees the prover's address for the duration of the `/api/pass` request (to read its public deposits) but stores only one-way Pedersen commitments of it, never the raw address — see `src/lib/attestation.ts`. **Be precise about a real trade-off this pass introduced:** one of those two stored commitments (`issuer_commitment`) includes a random salt and is unguessable without it; the other (`address_commitment`, added to enforce "one pass per wallet per campaign") is deterministic — `pedersen(address, campaignId)`, no salt — specifically so repeat requests for the same wallet collide. That means anyone with **database access** (in practice, only Prova operating honestly, or Prova compromised) could test a candidate address against a campaign and learn whether that address already holds a pass for it. It reveals nothing to anyone without database access, and nothing about which wallet claims a pass, but it is a narrower privacy guarantee against an already-trusted-or-compromised operator than the previous salted-only design — a deliberate trade against a concrete abuse (unlimited pass minting from one wallet), disclosed rather than left implicit. |
 
 In short: **today**, unlinkability is real and enforced on-chain; the
 predicate check is a signed server attestation instead of a client-side ZK

@@ -20,14 +20,22 @@ real mainnet transaction anyone can verify on Starkscan; its nullifier
 consumption is similarly checkable client-side with one click. The
 capability itself is no longer flat, either — an issuer can now lock a
 pass to one destination wallet at generation time, server-enforced before
-any signature exists, instead of pure-bearer being the only option. The
+any signature exists, instead of pure-bearer being the only option, and
+issuance itself is now hygienic — one wallet gets exactly one pass per
+campaign, enforced by a deterministic commitment, not just good faith. The
 one place we haven't reached full trustlessness — the predicate check is a
 signed attestation, not yet a client-side ZK proof — is disclosed plainly,
 with on-chain proof of *why* a proof-based version isn't possible yet (a
 real `EMPTY_PROOF_FACTS` revert from the pool itself) and a precise,
 unhedged statement of what that attestation model does and doesn't
-guarantee. It's a primitive judges haven't seen elsewhere in this sprint,
-built honestly, and shippable today.
+guarantee. What's new this pass: even that one remaining trust boundary is
+no longer opaque — the exact same eligibility computation the server runs
+also runs, independently, in the connecting wallet's own browser against
+public RPC, so nobody has to take Prova's "eligible"/"not eligible" verdict
+on faith; and if the attester's key were ever misused, the maximum damage
+is a live, publicly-checkable number (the reward pool's current on-chain
+balance), not an open-ended claim. It's a primitive judges haven't seen
+elsewhere in this sprint, built honestly, and shippable today.
 
 ## Live
 
@@ -115,6 +123,58 @@ real users at it. The mechanism itself is not a special case: any campaign
 with `reward_amount > 0` pays out identically for any real user who goes
 through the live app's `/api/pass` → `/api/claim` flow, no code change
 required.
+
+## What shipped in this pass (push toward 9/10: trust surface, capability, honesty)
+
+Mandate: pool-prover blocker is confirmed closed, stop re-litigating it —
+push everything else that's still movable toward 9/10. This pass, in
+priority order:
+
+- **Eligibility now runs client-side, independently, before the server is
+  ever asked.** `clientEvaluatePredicate` in `ProvaApp.tsx` is a direct
+  port of `src/lib/predicate.ts`'s server logic — same public `Deposit`
+  event source, same arithmetic — executed in the connecting wallet's own
+  browser against public RPC the instant wallet A connects. The UI shows
+  "🔍 Self-check… ✅ You qualify, N STRK found, need M" before the user
+  ever clicks Generate. This is the single biggest lever available without
+  the blocked prover: it doesn't make the server-side check unnecessary
+  (the contract still only trusts a server signature), but it makes the
+  server's *verdict* independently reproducible by anyone, not just
+  asserted.
+- **Closed a real issuance-hygiene gap.** The nullifier derivation
+  included a client-supplied `salt`, which meant a single qualifying
+  wallet could request unlimited passes for one campaign by varying the
+  salt on each request — nothing enforced "one pass per wallet." Added a
+  second, deterministic (salt-free) commitment, `address_commitment =
+  pedersen(address, campaignId)`, with a unique index on
+  `(campaign_id, address_commitment)` in Postgres; `/api/pass` now
+  rejects a second request for the same wallet+campaign with `409`. See
+  README "Who Prova can link, operationally" for the honest trade-off this
+  introduces (a compromised or dishonest operator with DB access could now
+  test a *candidate* address against a campaign — nothing is exposed to
+  anyone without DB access, and nothing links a claim to a wallet).
+- **Bounded, live-verifiable blast radius for a dishonest attestation.**
+  Reward campaigns now show the `ProvaPass` contract's real, current STRK
+  balance, read client-side from public RPC. `IERC20.transfer` inside
+  `claim_with_prova_pass` can never move more than the contract holds, so
+  this number is the actual worst case if the attester's key were ever
+  misused — not a claim, a live on-chain fact anyone can check themselves.
+- **Defensive expiry check server-side.** The Cairo contract already
+  enforces campaign expiry on-chain (`assert(get_block_timestamp() <=
+  expiry)`, `prova_pass.cairo:135`) — that was never bypassable. But
+  `/api/claim` didn't check it before relaying, so an expired pass would
+  burn Prova's own gas on a guaranteed revert instead of failing fast with
+  a clear message. Added the same check server-side, before `account.execute`.
+- **Capability clarity in the UI.** "Your passes (this device)" now tags
+  each pass `🔒 locked` or `bearer`; the exported-token panel for a locked
+  pass explains plainly that sharing it with anyone but the bound wallet
+  is pointless, instead of the same generic bearer-token copy for both
+  modes.
+
+None of the above required a contract redeploy or changed the on-chain
+ABI. Full re-typecheck (`tsc --noEmit`) and production build
+(`next build`) both pass clean; both themes re-verified with Playwright
+screenshots after the change.
 
 ## What shipped in this pass (destination binding + trust-surface reduction)
 

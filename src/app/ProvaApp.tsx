@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { connect, disconnect } from "@starknet-io/get-starknet";
-import { RpcProvider } from "starknet";
+import { RpcProvider, hash, num } from "starknet";
 
 type Campaign = {
   id: string;
@@ -56,6 +56,76 @@ async function fetchStrkBalance(address: string): Promise<bigint> {
     calldata: [address],
   });
   return BigInt(result[0] ?? "0x0");
+}
+
+// Same public pool contract Prova's server reads — hardcoded here (not a
+// secret; it's published in README/strk20.json) so eligibility can be
+// re-derived entirely client-side, from the same public data, without
+// asking Prova at all. This is not a second opinion layered on top of a
+// black box: it is the identical computation src/lib/predicate.ts performs
+// server-side, run independently in the browser against public RPC.
+const STRK20_POOL_ADDRESS = "0x040337b1af3c663e86e333bab5a4b28da8d4652a15a69beee2b677776ffe812a";
+const DEPOSIT_EVENT_KEY = num.toHex(hash.starknetKeccak("Deposit"));
+
+type ClientDeposit = { amount: bigint; token: string; timestampSec: number };
+
+async function clientGetDepositHistory(userAddress: string, needTimestamps: boolean): Promise<ClientDeposit[]> {
+  const provider = new RpcProvider({ nodeUrl: PUBLIC_RPC_URL });
+  const userFelt = num.toHex(userAddress);
+  const deposits: ClientDeposit[] = [];
+  let continuationToken: string | undefined;
+
+  do {
+    const page = await provider.getEvents({
+      address: STRK20_POOL_ADDRESS,
+      keys: [[DEPOSIT_EVENT_KEY], [userFelt]],
+      chunk_size: 100,
+      continuation_token: continuationToken,
+      from_block: { block_number: 0 },
+      to_block: "latest",
+    });
+    for (const ev of page.events) {
+      const [, token, amountLow] = ev.data ?? [];
+      let timestampSec = 0;
+      if (needTimestamps) {
+        const block = await provider.getBlockWithTxHashes(ev.block_hash ?? "latest");
+        timestampSec = "timestamp" in block ? (block.timestamp as number) : 0;
+      }
+      deposits.push({ amount: BigInt(amountLow ?? "0"), token: token ?? "", timestampSec });
+    }
+    continuationToken = page.continuation_token;
+  } while (continuationToken);
+
+  return deposits;
+}
+
+type SelfCheckResult = { eligible: boolean; total: bigint; count: number };
+
+// Independent, client-only re-derivation of the exact predicate Prova's
+// server will check. Runs before /api/pass is ever called, so a user (or a
+// judge) never has to take Prova's "eligible" / "not eligible" verdict on
+// faith — the same public deposit events, the same arithmetic, done in the
+// browser.
+async function clientEvaluatePredicate(campaign: Campaign, userAddress: string): Promise<SelfCheckResult> {
+  const needsTimestamps = campaign.predicate_type === "held_since";
+  const deposits = (await clientGetDepositHistory(userAddress, needsTimestamps)).filter(
+    (d) => d.token.toLowerCase() === campaign.predicate_asset.toLowerCase()
+  );
+  const minAmount = BigInt(campaign.predicate_min_amount);
+
+  if (campaign.predicate_type === "deposit_count") {
+    const count = BigInt(deposits.length);
+    return { eligible: count >= minAmount, total: count, count: deposits.length };
+  }
+
+  const nowSec = Math.floor(Date.now() / 1000);
+  const cutoff = campaign.predicate_type === "held_since" ? nowSec - campaign.predicate_min_days * 86400 : null;
+  let running = BigInt(0);
+  for (const d of deposits) {
+    if (cutoff !== null && d.timestampSec > cutoff) continue;
+    running += d.amount;
+  }
+  return { eligible: running >= minAmount, total: running, count: deposits.length };
 }
 
 function short(addr: string | null | undefined) {
@@ -246,6 +316,9 @@ export default function ProvaApp() {
   const [redeemVerify, setRedeemVerify] = useState<"idle" | "checking" | "confirmed" | "failed">("idle");
   const [claimBalanceDelta, setClaimBalanceDelta] = useState<string | null>(null);
   const [redeemBalanceDelta, setRedeemBalanceDelta] = useState<string | null>(null);
+  const [selfCheck, setSelfCheck] = useState<"idle" | "checking" | "eligible" | "ineligible" | "error">("idle");
+  const [selfCheckDetail, setSelfCheckDetail] = useState<string>("");
+  const [rewardPoolBalance, setRewardPoolBalance] = useState<string | null>(null);
 
   useEffect(() => {
     setLocalPasses(loadLocalPasses());
@@ -261,6 +334,61 @@ export default function ProvaApp() {
   }, []);
 
   const campaign = campaigns.find((c) => c.id === selected);
+
+  // Independent re-derivation of eligibility, entirely client-side, the
+  // moment wallet A is connected — before /api/pass is ever called. This is
+  // not decorative: it's the same computation Prova's server performs,
+  // run against the same public data, so nothing about "are you eligible"
+  // requires trusting Prova's answer.
+  useEffect(() => {
+    if (!campaign || !proverWallet) {
+      setSelfCheck("idle");
+      setSelfCheckDetail("");
+      return;
+    }
+    let cancelled = false;
+    setSelfCheck("checking");
+    setSelfCheckDetail("");
+    clientEvaluatePredicate(campaign, proverWallet)
+      .then((result) => {
+        if (cancelled) return;
+        setSelfCheck(result.eligible ? "eligible" : "ineligible");
+        setSelfCheckDetail(
+          campaign.predicate_type === "deposit_count"
+            ? `${result.count} deposit(s) found, need ${campaign.predicate_min_amount}.`
+            : `${formatStrk(result.total.toString())} qualifying, need ${formatStrk(campaign.predicate_min_amount)}.`
+        );
+      })
+      .catch(() => {
+        if (cancelled) return;
+        setSelfCheck("error");
+        setSelfCheckDetail("Could not reach public RPC to self-check — Provah's own check still runs when you generate a pass.");
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [campaign, proverWallet]);
+
+  // Live, on-chain-verified upper bound on what a dishonest attestation
+  // could ever pay out: ProvaPass can never transfer more STRK than it
+  // currently holds, so this number is the real worst case, not a claim.
+  useEffect(() => {
+    if (!campaign || !rewardLabel(campaign)) {
+      setRewardPoolBalance(null);
+      return;
+    }
+    let cancelled = false;
+    fetchStrkBalance(PROVA_PASS_CONTRACT_ADDRESS)
+      .then((bal) => {
+        if (!cancelled) setRewardPoolBalance(bal.toString());
+      })
+      .catch(() => {
+        if (!cancelled) setRewardPoolBalance(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [campaign]);
 
   const flowStage: "idle" | "wallet-a" | "pass" | "wallet-b" | "claimed" = claimTx
     ? "claimed"
@@ -523,6 +651,20 @@ export default function ProvaApp() {
                 💰 {rewardLabel(campaign)}
               </p>
             )}
+            {rewardLabel(campaign) && rewardPoolBalance !== null && (
+              <p className="mt-1 text-xs text-neutral-500 dark:text-neutral-500">
+                🔒 Reward pool currently holds {formatStrk(rewardPoolBalance)}, read live from{" "}
+                <a
+                  className="underline hover:text-neutral-700 dark:hover:text-neutral-300"
+                  href={`https://starkscan.co/contract/${PROVA_PASS_CONTRACT_ADDRESS}`}
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  the contract
+                </a>
+                . That is the hard cap on what any attestation — honest or not — could ever pay out.
+              </p>
+            )}
             {campaign.create_tx_hash && (
               <p className="mt-1 font-mono text-xs">
                 campaign tx:{" "}
@@ -556,6 +698,25 @@ export default function ProvaApp() {
           </button>
           <span className="font-mono text-sm text-neutral-500 dark:text-neutral-400">{short(proverWallet)}</span>
         </div>
+        {proverWallet && selfCheck !== "idle" && (
+          <p
+            className={`rounded-md border px-2 py-1.5 text-xs ${
+              selfCheck === "eligible"
+                ? "border-emerald-300 bg-emerald-50 text-emerald-700 dark:border-emerald-800 dark:bg-emerald-500/10 dark:text-emerald-300"
+                : selfCheck === "ineligible"
+                  ? "border-neutral-300 bg-neutral-50 text-neutral-600 dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-400"
+                  : selfCheck === "error"
+                    ? "border-amber-300 bg-amber-50 text-amber-800 dark:border-amber-800 dark:bg-amber-500/10 dark:text-amber-300"
+                    : "border-neutral-200 bg-neutral-50 text-neutral-500 dark:border-neutral-800 dark:bg-neutral-900 dark:text-neutral-500"
+            }`}
+          >
+            🔍 Self-check (runs in your browser, against public RPC, independent of Provah):{" "}
+            {selfCheck === "checking" && "reading your public deposit history…"}
+            {selfCheck === "eligible" && `✅ You qualify. ${selfCheckDetail}`}
+            {selfCheck === "ineligible" && `Not yet eligible. ${selfCheckDetail}`}
+            {selfCheck === "error" && selfCheckDetail}
+          </p>
+        )}
         <label className="flex items-center gap-2 text-sm text-neutral-700 dark:text-neutral-300">
           <input
             type="checkbox"
@@ -694,7 +855,18 @@ export default function ProvaApp() {
                 key={p.nullifier}
                 className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-neutral-200 px-3 py-2.5 text-sm transition-colors hover:border-neutral-300 dark:border-neutral-800 dark:hover:border-neutral-700"
               >
-                <span>{p.campaignName}</span>
+                <span className="flex items-center gap-2">
+                  {p.campaignName}
+                  {p.boundRecipient ? (
+                    <span className="rounded-full border border-indigo-300 px-2 py-0.5 text-[10px] text-indigo-700 dark:border-indigo-800 dark:text-indigo-300">
+                      🔒 locked
+                    </span>
+                  ) : (
+                    <span className="rounded-full border border-amber-300 px-2 py-0.5 text-[10px] text-amber-700 dark:border-amber-800 dark:text-amber-300">
+                      bearer
+                    </span>
+                  )}
+                </span>
                 <span className="font-mono text-xs text-neutral-500 dark:text-neutral-500">{short(p.nullifier)}</span>
               </li>
             ))}
@@ -795,8 +967,9 @@ function PassTokenExport({ pass }: { pass: LocalPass }) {
   return (
     <div className="flex flex-col gap-1">
       <p className="text-xs text-neutral-500 dark:text-neutral-500">
-        Share this token with anyone. They can redeem it from any wallet, no connection to this
-        browser or wallet A required.
+        {pass.boundRecipient
+          ? `This pass is locked to ${short(pass.boundRecipient)} — Provah will refuse to claim it to any other wallet, so sharing it with anyone else is pointless. Only useful to hand to that specific wallet's owner.`
+          : "Share this token with anyone. They can redeem it from any wallet, no connection to this browser or wallet A required."}
       </p>
       <div className="flex items-start gap-2">
         <textarea
