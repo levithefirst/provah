@@ -1,0 +1,100 @@
+"use client";
+
+import { useState } from "react";
+
+const NAV_LINKS = [
+  { href: "#how-it-works", label: "How it works" },
+  { href: "#app", label: "Campaigns" },
+  { href: "https://github.com/levithefirst/provah#readme", label: "Docs" },
+  { href: "https://github.com/levithefirst/provah", label: "GitHub" },
+];
+
+function LogoMark() {
+  return (
+    <svg width="28" height="28" viewBox="0 0 28 28" fill="none" aria-hidden="true">
+      <rect width="28" height="28" rx="8" fill="#4F46E5" />
+      <circle cx="10" cy="14" r="3" fill="white" />
+      <circle cx="18" cy="9" r="2.2" fill="white" fillOpacity="0.85" />
+      <circle cx="18" cy="19" r="2.2" fill="white" fillOpacity="0.85" />
+    </svg>
+  );
+}
+
+export default function Header() {
+  const [open, setOpen] = useState(false);
+
+  return (
+    <header className="sticky top-0 z-50 border-b border-neutral-200/80 bg-white/80 backdrop-blur-md">
+      <div className="mx-auto flex max-w-6xl items-center justify-between px-6 py-4">
+        <a href="#top" className="flex items-center gap-2.5 font-semibold text-neutral-900">
+          <LogoMark />
+          <span className="text-lg tracking-tight">Prova Pass</span>
+        </a>
+
+        <nav className="hidden items-center gap-8 md:flex">
+          {NAV_LINKS.map((l) => (
+            <a
+              key={l.label}
+              href={l.href}
+              className="text-sm font-medium text-neutral-600 transition-colors hover:text-neutral-900"
+              target={l.href.startsWith("http") ? "_blank" : undefined}
+              rel={l.href.startsWith("http") ? "noreferrer" : undefined}
+            >
+              {l.label}
+            </a>
+          ))}
+        </nav>
+
+        <div className="flex items-center gap-3">
+          <a
+            href="#app"
+            className="hidden rounded-full bg-neutral-900 px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-neutral-800 sm:inline-block"
+          >
+            Launch App
+          </a>
+          <button
+            onClick={() => setOpen((v) => !v)}
+            className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-neutral-200 text-neutral-700 md:hidden"
+            aria-label="Toggle menu"
+          >
+            {open ? (
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+                <path d="M1 1L15 15M15 1L1 15" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+              </svg>
+            ) : (
+              <svg width="16" height="16" viewBox="0 0 16 16" fill="none">
+                <path d="M1 3H15M1 8H15M1 13H15" stroke="currentColor" strokeWidth="1.6" strokeLinecap="round" />
+              </svg>
+            )}
+          </button>
+        </div>
+      </div>
+
+      {open && (
+        <div className="border-t border-neutral-200 bg-white px-6 py-4 md:hidden">
+          <div className="flex flex-col gap-4">
+            {NAV_LINKS.map((l) => (
+              <a
+                key={l.label}
+                href={l.href}
+                onClick={() => setOpen(false)}
+                className="text-sm font-medium text-neutral-700"
+                target={l.href.startsWith("http") ? "_blank" : undefined}
+                rel={l.href.startsWith("http") ? "noreferrer" : undefined}
+              >
+                {l.label}
+              </a>
+            ))}
+            <a
+              href="#app"
+              onClick={() => setOpen(false)}
+              className="rounded-full bg-neutral-900 px-5 py-2.5 text-center text-sm font-semibold text-white"
+            >
+              Launch App
+            </a>
+          </div>
+        </div>
+      )}
+    </header>
+  );
+}

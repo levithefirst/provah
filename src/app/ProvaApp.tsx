@@ -338,18 +338,10 @@ export default function ProvaApp() {
   }
 
   return (
-    <div className="max-w-3xl mx-auto px-6 py-12 flex flex-col gap-10">
-      <header className="flex flex-col gap-2">
-        <h1 className="text-3xl font-semibold tracking-tight">Prova Pass</h1>
-        <p className="text-neutral-400">
-          A general capability layer for private STRK20 state: prove something about holdings
-          you never reveal, get a bearer capability, redeem it from any wallet on earth.
-        </p>
-      </header>
-
+    <div className="flex flex-col gap-8 text-neutral-100">
       <CapabilityFlow stage={flowStage} />
 
-      <section className="flex flex-col gap-3">
+      <section className="flex flex-col gap-3 rounded-3xl border border-neutral-800 bg-neutral-900/40 p-6 sm:p-8">
         <h2 className="text-lg font-medium">1. Pick a campaign</h2>
         <select
           className="bg-neutral-900 border border-neutral-700 rounded-md px-3 py-2"
@@ -395,7 +387,7 @@ export default function ProvaApp() {
         )}
       </section>
 
-      <section className="flex flex-col gap-3">
+      <section className="flex flex-col gap-3 rounded-3xl border border-neutral-800 bg-neutral-900/40 p-6 sm:p-8">
         <h2 className="text-lg font-medium">2. Connect your private wallet, generate a pass</h2>
         <div className="flex gap-3 items-center">
           <button
@@ -410,7 +402,7 @@ export default function ProvaApp() {
         <button
           onClick={handleGeneratePass}
           disabled={busy || !proverWallet || !campaign}
-          className="self-start px-4 py-2 border border-neutral-600 rounded-md disabled:opacity-40"
+          className="self-start px-4 py-2 border border-neutral-600 rounded-md text-neutral-100 disabled:opacity-40"
         >
           Generate Prova Pass
         </button>
@@ -422,7 +414,7 @@ export default function ProvaApp() {
         )}
       </section>
 
-      <section className="flex flex-col gap-3">
+      <section className="flex flex-col gap-3 rounded-3xl border border-neutral-800 bg-neutral-900/40 p-6 sm:p-8">
         <h2 className="text-lg font-medium">3. Connect a different wallet, claim</h2>
         <div className="flex gap-3 items-center">
           <button
@@ -442,7 +434,7 @@ export default function ProvaApp() {
         <button
           onClick={handleClaim}
           disabled={busy || !pass || !claimWallet}
-          className="self-start px-4 py-2 border border-neutral-600 rounded-md disabled:opacity-40"
+          className="self-start px-4 py-2 border border-neutral-600 rounded-md text-neutral-100 disabled:opacity-40"
         >
           Claim
         </button>
@@ -461,10 +453,14 @@ export default function ProvaApp() {
         )}
       </section>
 
-      {status && <p className="text-sm text-neutral-400 border-t border-neutral-800 pt-4">{status}</p>}
+      {status && (
+        <p className="rounded-2xl border border-neutral-800 bg-neutral-900/40 px-5 py-4 text-sm text-neutral-400">
+          {status}
+        </p>
+      )}
 
       {localPasses.length > 0 && (
-        <section className="flex flex-col gap-3 border-t border-neutral-800 pt-6">
+        <section className="flex flex-col gap-3 rounded-3xl border border-neutral-800 bg-neutral-900/40 p-6 sm:p-8">
           <h2 className="text-lg font-medium">Your passes (this device)</h2>
           <p className="text-sm text-neutral-500">
             Passes are bearer capabilities — Prova has no account system and cannot list &quot;your&quot;
@@ -485,7 +481,7 @@ export default function ProvaApp() {
         </section>
       )}
 
-      <section className="flex flex-col gap-3 border-t border-neutral-800 pt-6">
+      <section className="flex flex-col gap-3 rounded-3xl border border-neutral-800 bg-neutral-900/40 p-6 sm:p-8">
         <h2 className="text-lg font-medium">Redeem a pass someone gave you</h2>
         <p className="text-sm text-neutral-500">
           A Prova Pass is a bearer token. Paste one below — from a friend, a Discord DM, a QR code,
@@ -511,7 +507,7 @@ export default function ProvaApp() {
         <button
           onClick={handleRedeem}
           disabled={busy || !redeemToken || !redeemWallet}
-          className="self-start px-4 py-2 border border-neutral-600 rounded-md disabled:opacity-40"
+          className="self-start px-4 py-2 border border-neutral-600 rounded-md text-neutral-100 disabled:opacity-40"
         >
           Redeem
         </button>
@@ -525,14 +521,6 @@ export default function ProvaApp() {
           </p>
         )}
       </section>
-
-      <footer className="text-xs text-neutral-600 border-t border-neutral-800 pt-4">
-        See{" "}
-        <a className="underline" href="https://github.com/levithefirst/provah" target="_blank" rel="noreferrer">
-          README — &quot;what is private / what is not&quot;
-        </a>{" "}
-        for exactly what this demo does and does not hide today.
-      </footer>
     </div>
   );
 }
@@ -566,7 +554,7 @@ function PassTokenExport({ pass }: { pass: LocalPass }) {
         />
         <button
           onClick={copy}
-          className="px-3 py-1 border border-neutral-600 rounded-md text-xs shrink-0"
+          className="px-3 py-1 border border-neutral-600 rounded-md text-xs text-neutral-100 shrink-0"
         >
           {copied ? "Copied" : "Copy"}
         </button>
