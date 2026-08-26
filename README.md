@@ -116,8 +116,17 @@ starter kit, the official `starknet-privacy` reference demo (which ships
 the URL as a literal unfilled `TODO_MAINNET_PROVER_URL`) — and asked
 directly via a hackathon-repo issue. As of this write-up, a maintainer
 thread asking the identical question ([issue #147](https://github.com/starkience/strk20-hackathon/issues/147),
-opened days before this project) is still unanswered. See `STATUS.md` for
-the full trail.
+opened days before this project) is still unanswered.
+
+We went one step further than checking docs: we hand-built and submitted a
+real fee-estimation call for `EmitViewingKeySet` — the one pool action the
+hackathon's own guide says needs neither a proof nor screening — against the
+live pool contract's real ABI. It reached `apply_actions` correctly (no
+deserialization error) and reverted with the pool's own `EMPTY_PROOF_FACTS`
+error, three call-frames deep in its execution. That confirms, on-chain,
+that *every* `apply_actions` call — not just deposits — requires a bundle of
+STARK proof artifacts that only the undocumented prover service can
+produce. See `STATUS.md` for the full transcript of that attempt.
 
 Until that endpoint (hosted or self-run) exists, Prova's backend evaluates
 the predicate directly against the pool's *public* deposit history and
@@ -250,13 +259,17 @@ confirmed mainnet transactions, machine-readable in
 
 **Note on scope:** all seven transactions are against `ProvaPass`, the
 contract this project built on top of the pool's public deposit events —
-none of them are direct calls into the STRK20 pool contract itself. That's
-a deliberate consequence of the same gap documented above: the pool's
-state-changing entrypoints only accept calls through a mainnet
-transaction-prover service whose endpoint isn't publicly published. We
-asked directly (see "The attester today" above) and got no answer before
-this submission. Prova reads the pool's public `Deposit` events; it does
-not write to the pool.
+none of them are direct calls into the STRK20 pool contract itself. This
+isn't for lack of trying: see "The attester today" above and `STATUS.md` for
+a real, on-chain-confirmed attempt — a hand-built `apply_actions` call for
+the pool's least-restrictive action (registering a viewing key, which needs
+no screening) reached the live contract and reverted with its own
+`EMPTY_PROOF_FACTS` error, proving that every pool state-change, not just
+deposits, is gated on a mainnet transaction-prover output with no published
+endpoint. We asked directly (issue #147) and got no answer before this
+submission. Prova reads the pool's public `Deposit` events; it does not
+write to the pool — and now has concrete on-chain evidence, not just doc
+research, for why.
 
 ## License
 

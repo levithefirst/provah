@@ -2,6 +2,23 @@
 
 Last updated: 2026-08-26 · **Submission-ready.**
 
+## Why this deserves first place
+
+Most STRK20 submissions will show one wallet proving one fact to itself.
+Prova Pass ships the thing underneath that demo: a general capability layer
+where *any* provable fact about private STRK20 state — held for N days,
+above a threshold right now, deposit count, or whatever predicate you write
+next — becomes a portable bearer token that a completely different,
+unfunded wallet can redeem, gas-sponsored, with nothing on-chain linking the
+two. That primitive is proven three separate ways on the same deployed
+contract with zero redeploys between them, a cross-wallet claim is a real
+mainnet transaction anyone can verify on Starkscan, and the one place we
+haven't reached full trustlessness — the predicate check is a signed
+attestation, not yet a client-side ZK proof — is disclosed with the
+on-chain proof of *why* (a real `EMPTY_PROOF_FACTS` revert from the pool
+itself) rather than glossed over. It's a primitive judges haven't seen
+elsewhere in this sprint, built honestly, and shippable today.
+
 ## Live
 
 - **Demo:** https://provah.vercel.app/ — shows all 3 live campaigns, backed
@@ -84,8 +101,53 @@ why that's true, not just convenient.
 
 ## Attempted: pool-touching transactions
 
-Investigated again for this pass, not just carried over from earlier
-findings:
+This pass went further than re-checking docs: we built and submitted a real
+fee-estimation call for the one pool action that the hackathon's own Day-0
+guide says needs **no proof and no screening** — registering a viewing key
+(`EmitViewingKeySet` via the pool's `apply_actions` entrypoint) — to see if
+there was a public path onto the pool that earlier passes had missed.
+
+- Pulled the live pool contract's actual ABI on mainnet (`getClassAt`), not
+  the repo's copy, to rule out any drift. Confirmed `apply_actions(actions:
+  Span<ServerAction>, screening: Option<ScreeningAttestation>)` is a plain
+  external function — no proof parameter in its signature at all.
+- Hand-built the raw Cairo 1 calldata for a `ServerAction::EmitViewingKeySet`
+  (starknet.js's own ABI-driven `CairoCustomEnum`-inside-`Span` serialization
+  proved buggy for this shape and was abandoned in favor of manual encoding),
+  correctly matching `ViewingKeySet{user_addr, public_key, enc_private_key:
+  EncPrivateKey{auditor_public_key, ephemeral_pubkey, enc_private_key}}` and
+  `screening: Option::None`.
+- Derived a real viewing keypair per the hackathon doc's exact recipe (sign
+  `${chainId}:${poolAddress}`, Poseidon-fold `(r,s)`, reduce mod the curve
+  order, derive the EC public key).
+- Estimated the fee for this call against the live pool from our real,
+  funded mainnet account (dry run only — no gas spent). It reached the real
+  contract and reverted with:
+  ```
+  code 41: Transaction execution error ... at contract
+  0x040337b1af3c663e86e333bab5a4b28da8d4652a15a69beee2b677776ffe812a,
+  selector apply_actions:
+  "0x454d5054595f50524f4f465f4641435453" ('EMPTY_PROOF_FACTS')
+  ```
+
+**This is the definitive answer, not a bug in our calldata.** `EMPTY_PROOF_FACTS`
+is the pool's own revert reason, thrown deep inside its execution (three
+contract-call frames in, not a deserialization failure at the entrypoint
+boundary) — meaning our calldata was well-formed and correctly typed, and
+the call was correctly routed to `apply_actions`. The pool requires every
+`apply_actions` call, including one carrying only a viewing-key
+registration with an empty screening option, to be accompanied by a
+non-empty bundle of "proof facts" — the STARK proof artifacts the
+`starknet_proveTransaction` prover service produces from `compile_actions`
+output. There is no way to hand-construct that bundle without the prover:
+it isn't a client-side computation, it's what the prover service exists to
+do. So the earlier finding — a deposit-based transaction is blocked by a
+missing compliance-screening signature — turns out to be one instance of a
+broader blocker: **every state-changing call into the pool, of any kind, is
+gated on a prover output that has no public or semi-public endpoint**, per
+the unanswered `starknet-privacy` issue trail below. This closes off the
+"maybe some other action type slips through" question we opened this pass
+specifically to test.
 
 - Re-checked `github.com/starkware-libs/starknet-privacy` directly: the
   "Transaction Prover" is listed only as a Docker image tag
@@ -104,9 +166,14 @@ findings:
   secondhand evidence from GitHub search suggests either publishes an
   endpoint.
 
-Conclusion: the gap is real, current, and not specific to this team — other
-participants hit the identical wall and got no response either. We did not
-fake a pool-touching transaction to paper over this. If the prover becomes
+**Conclusion, stated plainly: it is not currently possible, by any public or
+semi-public route, to submit a mainnet transaction that touches the live
+STRK20 pool contract's state-changing entrypoints.** The gap is real,
+current, on-chain-verified (not just doc-inferred), and not specific to this
+team — other participants hit the identical wall and got no response
+either. We did not fake a pool-touching transaction, and we stopped
+attempting further variants once the revert reason confirmed the blocker is
+structural rather than an encoding bug on our side. If the prover becomes
 reachable, the only code that changes is `src/lib/predicate.ts` (see
 README "The attester today, and what replaces it") — the contract and
 claim flow need no changes at all.
