@@ -1,6 +1,25 @@
 # Prova Pass — build status
 
-Last updated: 2026-08-25
+Last updated: 2026-08-26
+
+## LIVE on Starknet mainnet
+- Operating account (OpenZeppelin single-signer, no guardian):
+  `0x3b8fa185523ff035d5df73c55859a264ec39e3c72f8cb49fc2ee306ee842ede`
+  — deploy_account tx `0x266ff30feda87e59c13eeccf122af1d82aaf92088d95cf7dcbff91f44c3c010`
+- `ProvaPass` contract: `0x74614e0cd54af7e59987a5d74fdd028209feff01fc20eca2934fe80b94db402`
+  (class hash `0x7adfeaf0d075cda33b3128fd9cc255e34e7b778e907cbb64216d76bd7cf89e6`)
+  — declare tx `0x1d57d647ff240ff4c02d9fb255bbaf80bc5238f8091483f33505c0ca3011153`,
+  deploy tx `0x79375d773a91d5726a9bf896e114bc7549003f05c7decd685a0bce5b47dc70a`
+- Campaign "STRK Loyalty Drop" created — invoke tx
+  `0x758de909a13df099cd72a1ef843217805d04ab761ab57e2bcd4c0f924c126e6`
+- A pass claimed from a wallet unrelated to the qualifying holder — invoke tx
+  `0x5ebf464f06bfe864f2ee875a4b8a84ab8032b31ced539300424067ae14f9dce`
+
+All 5 transactions are real, confirmed mainnet transactions (see `strk20.json`).
+Note: the old Argent operating wallet
+(`0x031676cdcf7fbfd07e73c420780d4efb51ba8778dc1c29db0c9527d1dd9a4a07`) was
+abandoned mid-build after its guardian could not be cleanly removed — it is
+no longer used for anything except as a demo claim-recipient address above.
 
 ## Confirmed facts (from official sources)
 - STRK20 privacy pool is live on Starknet mainnet at
@@ -60,23 +79,15 @@ key, or can be submitted directly once funded).
       claim), builds clean (`npm run build`, `tsc --noEmit`)
 - [x] GitHub Actions workflow (`mainnet-admin.yml`) as a mainnet-execution
       path independent of the Vercel git-link issue below
-- [ ] **Blocked on repo maintainer action:** Vercel project for this repo
-      keeps failing to link via the API (`create_git_project` creates a
-      project but the GitHub link 404s immediately after — tried 3x with
-      different project names, same result). This looks like Vercel's
-      GitHub App not being authorized for `levithefirst/provah`. Needs a
-      human to import the repo from the Vercel dashboard once (which
-      triggers the GitHub App auth flow), or to fix the existing stuck
-      project's Git connection in its Settings.
-- [ ] **Blocked on repo maintainer action:** no MCP tool exists to set
-      Vercel env vars or GitHub Actions secrets from this session. Needs
-      `STARKNET_ACCOUNT_ADDRESS`, `STARKNET_PRIVATE_KEY`,
-      `PROVA_ATTESTER_PRIVATE_KEY`, `PROVA_ATTESTER_PUBLIC_KEY`, and
-      `DATABASE_URL` set as either Vercel project env vars or GitHub
-      Actions repo secrets (see `.env.example`) before any real mainnet
-      transaction can run.
-- [ ] Execute ≥3 real mainnet transactions (deploy, create-campaign,
-      claim) once the above is set — will populate `strk20.json`.
+- [x] GitHub Actions repo secrets set by the repo owner
+      (`STARKNET_ACCOUNT_ADDRESS`, `STARKNET_PRIVATE_KEY`,
+      `PROVA_ATTESTER_PRIVATE_KEY`, `PROVA_ATTESTER_PUBLIC_KEY`)
+- [x] Executed 5 real mainnet transactions (deploy_account, declare, deploy,
+      create-campaign, claim) — see "LIVE on Starknet mainnet" above and
+      `strk20.json`.
+- [ ] Confirm the public Vercel URL (`https://provah.vercel.app/`) reflects
+      the live contract addresses above — Vercel deployment status was not
+      independently re-verifiable from this session's tools.
 - [ ] Real transactions that touch the STRK20 pool contract itself remain
       blocked on the missing prover endpoint above; if you have access to
       the hackathon's Telegram/Discord support channel, that's the

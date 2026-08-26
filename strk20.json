@@ -1,6 +1,46 @@
 {
-  "transactions": [],
-  "contracts": [],
+  "transactions": [
+    {
+      "type": "deploy_account",
+      "hash": "0x266ff30feda87e59c13eeccf122af1d82aaf92088d95cf7dcbff91f44c3c010",
+      "description": "Deploy Prova's operating account (OpenZeppelin single-signer, no guardian) on Starknet mainnet."
+    },
+    {
+      "type": "declare",
+      "hash": "0x1d57d647ff240ff4c02d9fb255bbaf80bc5238f8091483f33505c0ca3011153",
+      "description": "Declare the ProvaPass Cairo contract class on Starknet mainnet."
+    },
+    {
+      "type": "deploy",
+      "hash": "0x79375d773a91d5726a9bf896e114bc7549003f05c7decd685a0bce5b47dc70a",
+      "description": "Deploy the ProvaPass contract instance on Starknet mainnet."
+    },
+    {
+      "type": "invoke",
+      "entrypoint": "create_campaign",
+      "hash": "0x758de909a13df099cd72a1ef843217805d04ab761ab57e2bcd4c0f924c126e6",
+      "description": "Create the 'STRK Loyalty Drop' campaign (predicate: hold >= 1 STRK for >= 7 days) on ProvaPass."
+    },
+    {
+      "type": "invoke",
+      "entrypoint": "claim_with_prova_pass",
+      "hash": "0x5ebf464f06bfe864f2ee875a4b8a84ab8032b31ced539300424067ae14f9dce",
+      "description": "Claim a Prova Pass from a wallet unrelated to the one that satisfied the predicate, consuming the nullifier one-time on-chain."
+    }
+  ],
+  "contracts": [
+    {
+      "name": "STRK20 privacy pool (StarkWare, existing)",
+      "address": "0x040337b1af3c663e86e333bab5a4b28da8d4652a15a69beee2b677776ffe812a",
+      "network": "mainnet"
+    },
+    {
+      "name": "ProvaPass",
+      "address": "0x74614e0cd54af7e59987a5d74fdd028209feff01fc20eca2934fe80b94db402",
+      "class_hash": "0x7adfeaf0d075cda33b3128fd9cc255e34e7b778e907cbb64216d76bd7cf89e6",
+      "network": "mainnet"
+    }
+  ],
   "demo_video": "",
-  "demo_url": ""
+  "demo_url": "https://provah.vercel.app/"
 }

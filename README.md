@@ -138,9 +138,13 @@ node scripts/mainnet-admin.mjs create-campaign "STRK Loyalty Drop" 0x04718f5a0fc
 
 ## Mainnet transactions
 
-See [`strk20.json`](strk20.json) — populated with real transaction hashes
-as they land; see `STATUS.md` for exactly which ones are executed vs.
-pending.
+**Live on Starknet mainnet.** `ProvaPass` is deployed at
+`0x74614e0cd54af7e59987a5d74fdd028209feff01fc20eca2934fe80b94db402`
+(class hash `0x7adfeaf0d075cda33b3128fd9cc255e34e7b778e907cbb64216d76bd7cf89e6`).
+Five real, confirmed mainnet transactions — account deployment, declare,
+deploy, `create_campaign`, and a `claim_with_prova_pass` redeemed from a
+wallet unrelated to the qualifying holder — are recorded with their hashes
+in [`strk20.json`](strk20.json); see `STATUS.md` for the full breakdown.
 
 ## License
 
