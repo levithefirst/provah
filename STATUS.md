@@ -369,6 +369,74 @@ reachable, the only code that changes is `src/lib/predicate.ts` (see
 README "The attester today, and what replaces it") — the contract and
 claim flow need no changes at all.
 
+## Final attempt: the Wallet API route
+
+One route hadn't been tried: `docs/MAINNET-DAY-0.md` in the hackathon repo
+distinguishes two ways to reach the mainnet prover — an app holding its own
+keys and calling the prover directly (blocked, above), versus **a
+privacy-enabled wallet reaching the prover on the user's behalf**, which
+needs no prover URL of the app's own. This pass ran that route down to its
+actual ceiling.
+
+- **Re-pulled the live pool's ABI fresh** (via the `pool-abi` mainnet-admin
+  action) rather than trusting the earlier dump. Confirmed `apply_actions`
+  really does take exactly two parameters —
+  `(actions: Span<ServerAction>, screening: Option<ScreeningAttestation>)`,
+  no third "proof" parameter — and it is the *only* state-changing
+  entrypoint on the contract; there is no separate plain `register` or
+  `deposit` function outside it. That rules out "we called the wrong
+  function" as the explanation for the earlier `EMPTY_PROOF_FACTS` revert:
+  the calldata shape was right, and the contract's proof requirement is
+  enforced some other way `apply_actions` itself doesn't expose — consistent
+  with the "fact registry" pattern Starknet's own proving stack uses
+  elsewhere, not with a missing calldata field on our end.
+- **Found the actual Wallet API surface.** It's three JSON-RPC methods a
+  wallet's injected provider must implement:
+  `wallet_supportedWalletApi` (version probe), `wallet_strk20Balances`
+  (read-only, safe to probe blind), and `wallet_strk20InvokeTransaction`
+  (the real one — takes an actions array, returns a transaction hash once
+  the wallet has proved it internally). None of this is Provah's own
+  invention: it's confirmed against a real, MIT-licensed reference
+  implementation ([PugarHuda/jalin](https://github.com/PugarHuda/jalin),
+  cited in [issue #121](https://github.com/starkience/strk20-hackathon/issues/121)),
+  whose own code comments cite a **real Ready-wallet mainnet transaction**
+  that shielded 10 STRK and emitted `ViewingKeySet`, `Deposit`, and
+  `EncNoteCreated` in one call — proof the route is real and has worked for
+  at least one team with the right wallet in hand.
+- **Confirmed we cannot stand up that wallet in this environment, for two
+  independent reasons, not one:**
+  1. The actual Ready and Braavos extension binaries are only distributed
+     through the Chrome Web Store. Both `chromewebstore.google.com` and
+     Google's direct CRX endpoint (`clients2.google.com`) are blocked by
+     this build environment's network egress policy (`CONNECT tunnel
+     failed, response 403` on direct test) — not a guess, a reproduced
+     failure.
+  2. As a fallback, we pulled Argent's own public, open-source wallet
+     repository (`argentlabs/argent-x`, the codebase "Ready" is built from)
+     and searched it for any trace of STRK20 support: zero matches for
+     `strk20` anywhere in the source. Braavos has no public repository to
+     fall back to at all — it's closed-source. So even with unrestricted
+     network access, there is currently no buildable-from-source wallet
+     that implements this API to load unpacked into a browser instead.
+- **Even setting the above aside, this route is structurally
+  human-in-the-loop.** `wallet_strk20InvokeTransaction` only exists inside a
+  real wallet extension's own popup UI, approved by whoever holds the keys;
+  it cannot be reached from a server-side script the way `apply_actions`
+  can. Automating a full wallet install, private-key import, and mainnet
+  transaction approval headlessly — even if the binary were reachable — is
+  not something we're willing to do unsupervised against an account holding
+  real funds, on a hackathon deadline, without a human confirming each step.
+
+**Updated conclusion:** the Wallet API route is real, documented precisely
+enough to identify its exact RPC surface, and has a genuine mainnet
+precedent — it is not vaporware. But it is closed to this project for two
+independently sufficient reasons: no STRK20-capable wallet binary is
+reachable from this build environment's network, and the one public,
+buildable-from-source alternative (Argent-X) does not yet contain the
+feature. This is the last realistic angle on this axis; we're not aware of
+a fourth route to try, and we're not going to keep guessing at ones that
+don't exist.
+
 ## Sprint requirements checklist
 
 - [x] Public GitHub repo with license (MIT; vendored StarkWare code keeps

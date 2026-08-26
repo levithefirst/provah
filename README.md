@@ -255,6 +255,20 @@ that *every* `apply_actions` call — not just deposits — requires a bundle of
 STARK proof artifacts that only the undocumented prover service can
 produce. See `STATUS.md` for the full transcript of that attempt.
 
+There is a second route besides holding the prover key yourself: a
+**privacy-enabled wallet** (Ready or Braavos) can reach the prover on the
+user's behalf, through three wallet-injected RPC methods —
+`wallet_supportedWalletApi`, `wallet_strk20Balances`,
+`wallet_strk20InvokeTransaction` — confirmed against a real, MIT-licensed
+reference implementation and a real cited Ready-wallet mainnet transaction
+that shielded STRK through it. We checked this route to its actual ceiling
+too: the real wallet binaries are Chrome-Web-Store-only, and that store is
+unreachable from this build environment (reproduced, not assumed); the one
+public, buildable-from-source alternative, Argent's own `argent-x` repo,
+contains zero references to STRK20 support as of this check. See
+`STATUS.md`'s "Final attempt: the Wallet API route" for the full trail —
+this is the last realistic angle on this axis, not one we stopped short on.
+
 Until that endpoint (hosted or self-run) exists, Prova's backend evaluates
 the predicate directly against the pool's *public* deposit history and
 signs the resulting capability — a server attestation, not a
