@@ -6,22 +6,26 @@ Last updated: 2026-08-26 · **Submission-ready.**
 
 Most STRK20 submissions will show one wallet proving one fact to itself.
 Prova Pass ships the thing underneath that demo: a general capability layer
-where *any* provable fact about private STRK20 state — held for N days,
-above a threshold right now, deposit count, or whatever predicate you write
-next — becomes a portable bearer token that a completely different,
+where any provable fact about a wallet's STRK20 pool activity — held for N
+days, above a threshold right now, deposit count, or whatever predicate you
+write next — becomes a portable bearer token that a completely different,
 unfunded wallet can redeem, gas-sponsored, with nothing on-chain linking the
-two. That primitive is proven three separate ways on the same deployed
-contract with zero redeploys between them, a cross-wallet claim is a real
-mainnet transaction anyone can verify on Starkscan, and the one place we
-haven't reached full trustlessness — the predicate check is a signed
-attestation, not yet a client-side ZK proof — is disclosed with the
-on-chain proof of *why* (a real `EMPTY_PROOF_FACTS` revert from the pool
-itself) rather than glossed over. It's a primitive judges haven't seen
-elsewhere in this sprint, built honestly, and shippable today.
+two. That primitive is proven four separate ways on the same deployed
+contract with zero redeploys between them; one of those four pays out a
+real ERC20 reward on redeem, verified on-chain wei-for-wei, so "redeem"
+means something moves, not just that a row gets written. A cross-wallet
+claim is a real mainnet transaction anyone can verify on Starkscan, and the
+one place we haven't reached full trustlessness — the predicate check is a
+signed attestation, not yet a client-side ZK proof — is disclosed plainly,
+with on-chain proof of *why* a proof-based version isn't possible yet (a
+real `EMPTY_PROOF_FACTS` revert from the pool itself) and a precise,
+unhedged statement of what that attestation model does and doesn't
+guarantee. It's a primitive judges haven't seen elsewhere in this sprint,
+built honestly, and shippable today.
 
 ## Live
 
-- **Demo:** https://provah.vercel.app/ — shows all 3 live campaigns, backed
+- **Demo:** https://provah.vercel.app/ — shows all 4 live campaigns, backed
   by the deployed contract below.
 - **Contract (`ProvaPass`):**
   `0x74614e0cd54af7e59987a5d74fdd028209feff01fc20eca2934fe80b94db402`
@@ -29,23 +33,27 @@ elsewhere in this sprint, built honestly, and shippable today.
 - **Operating account** (OpenZeppelin single-signer, no guardian):
   `0x3b8fa185523ff035d5df73c55859a264ec39e3c72f8cb49fc2ee306ee842ede`
 
-## Live campaigns (3, all on the same contract, no redeploy between them)
+## Live campaigns (4, all on the same contract, no redeploy between them)
 
 | Campaign | Predicate type | Claim kind |
 |---|---|---|
 | STRK Loyalty Drop | `held_since` (held ≥1 STRK for ≥7 days) | capability |
 | STRK Holder Badge | `balance_threshold` (held ≥1 STRK, any time) | capability |
 | Active Depositor | `deposit_count` (≥1 deposit into the pool) | capability |
+| STRK Welcome Reward | `balance_threshold` (held ≥1 STRK, any time) | **reward_token — pays 0.05 real STRK on redeem** |
 
 This is the load-bearing architectural fact: `ProvaPass.cairo` never
 validates what a campaign's predicate *was* — `claim_with_prova_pass` only
 checks the attester's ECDSA signature over `(campaign_id, nullifier,
 recipient)`. Predicate logic lives entirely in `src/lib/predicate.ts`, so
 new predicate types (and new campaigns) require zero contract changes or
-redeploys. All three campaigns above ran through the same `create_campaign`
-entrypoint on the one deployed contract.
+redeploys. All four campaigns above ran through the same `create_campaign`
+entrypoint on the one deployed contract. The reward path was *already
+present* in the contract's `claim_with_prova_pass` — `if reward_amount > 0
+{ token.transfer(recipient, reward_amount) }` — from the original deploy;
+this pass is the first time it was actually funded and exercised for real.
 
-## Mainnet transactions (7, all confirmed)
+## Mainnet transactions (10, all confirmed)
 
 | # | Type | Hash |
 |---|---|---|
@@ -56,16 +64,51 @@ entrypoint on the one deployed contract.
 | 5 | `claim_with_prova_pass` (cross-wallet claim) | `0x5ebf464f06bfe864f2ee875a4b8a84ab8032b31ced539300424067ae14f9dce` |
 | 6 | `create_campaign` "STRK Holder Badge" | `0x41c16869dcd1f3781e839f44b9ea86b867d872f4177e7790fee631d957de9b3` |
 | 7 | `create_campaign` "Active Depositor" | `0x12aa67bcb97507d402cbe8a7308fd9a6c7ad3a9088227e4a35ad96603284496` |
+| 8 | `transfer` — fund ProvaPass with 1 real STRK | `0x76eeb4941bda080592816c3c51ca92da65c20de18c48e7d4782e90010927625` |
+| 9 | `create_campaign` "STRK Welcome Reward" | `0x1a64f5d8963b89118464d4613511b7f65eeb8ffb12f52df887e25404e5b32c0` |
+| 10 | `claim_with_prova_pass` — **real 0.05 STRK payout** | `0x45f6b0d60d1ef2b232885a416f562c16aea15365ea215efdd0db10c4da514c` |
 
 Machine-readable copy in [`strk20.json`](strk20.json). Exceeds the ≥3 real
 mainnet transaction requirement.
 
-**Scope note:** all 7 transactions are against `ProvaPass` (the contract
-this project built), not direct calls into the STRK20 pool contract — see
-"Attempted: pool-touching transactions" below for why, and the README's
-"What is private / what is not" for the full trust-boundary writeup. Prova
-reads the pool's public `Deposit` events; it does not submit transactions
-to it.
+**Scope note:** transactions 1–7, 9, and 10 are against `ProvaPass` (the
+contract this project built); transaction 8 is a plain ERC20 `transfer` on
+the STRK token contract, used to fund `ProvaPass`. None of the ten are
+direct calls into the STRK20 pool contract itself — see "Attempted:
+pool-touching transactions" below for why, and the README's "What is
+private / what is not" for the full trust-boundary writeup. Prova reads the
+pool's public `Deposit` events; it does not submit transactions to it.
+
+## Verified: redeem now moves real value, wei-for-wei
+
+Transaction 10 above is the direct answer to "redeem currently does almost
+nothing useful." Before this pass, every claim only ever wrote
+`(campaign_id, nullifier, recipient)` to the nullifier registry — a
+capability record, no different in effect from a receipt. This pass:
+
+1. Confirmed `claim_with_prova_pass` already contained a real payout path
+   (`IERC20.transfer` gated on `reward_amount > 0`), present since the
+   original deploy but never exercised — no redeploy was needed.
+2. Added `fund-contract` tooling and sent 1 real STRK from the operating
+   account to the deployed `ProvaPass` contract (tx 8).
+3. Created a new campaign, "STRK Welcome Reward," with `reward_token`
+   set to real STRK and `reward_amount` set to `50000000000000000` wei
+   (0.05 STRK) (tx 9).
+4. Generated a fresh, never-before-used recipient address locally and
+   checked its STRK balance via `balanceOf`: **`0`**.
+5. Executed `claim_with_prova_pass` for that recipient (tx 10) and checked
+   its balance again: **exactly `50000000000000000` wei** — matching the
+   campaign's `reward_amount` to the wei, in the same transaction that
+   consumed the nullifier.
+
+That claim was operator-attested via `mainnet-admin.mjs` — signed with
+Prova's own attester key, the same key and code path `/api/claim` uses for
+every claim, run directly rather than through a browser session — to
+verify the payout mechanism end-to-end with real funds before pointing
+real users at it. The mechanism itself is not a special case: any campaign
+with `reward_amount > 0` pays out identically for any real user who goes
+through the live app's `/api/pass` → `/api/claim` flow, no code change
+required.
 
 ## What shipped in this pass (capability-layer generalization)
 
@@ -98,6 +141,46 @@ This pass turned that into a general primitive:
 
 None of this required a contract redeploy — see "Live campaigns" above for
 why that's true, not just convenient.
+
+## What shipped in this pass (redeem moves real value, honesty fixes)
+
+Consensus from a round of independent product reviews: this was still a
+server-signed bearer ticket, none of the mainnet transactions touched the
+pool, redeem did "almost nothing," and the marketing copy overclaimed
+privacy the implementation doesn't provide. This pass, in priority order:
+
+- **Redeem now moves real value** — see "Verified: redeem now moves real
+  value, wei-for-wei" above. `fund-contract` (new `mainnet-admin.mjs`
+  action) plus a live reward campaign turned the existing-but-unexercised
+  `IERC20.transfer` payout path into a real, on-chain-verified mainnet
+  transaction.
+- **Fixed the honesty gap in the marketing copy.** The hero, README, and
+  `strk20.json` tagline said "STRK20 holdings you never reveal" — but the
+  predicate is evaluated against the pool's *public* `Deposit` events, not
+  hidden note state. Rewrote to say plainly that eligibility is checked
+  against public on-chain activity, not private balances, and that the
+  privacy property that *is* real — unlinkability between the qualifying
+  wallet and the claiming wallet — is the thing worth calling private, not
+  the eligibility check itself.
+- **Fixed an overclaimed trust guarantee.** README previously said "nobody,
+  including Prova, can forge a pass for a predicate that doesn't hold" —
+  false as written, since `ProvaPass.cairo` only ever checks *a* signature
+  from the attester's key, not the predicate itself. Rewrote to state
+  precisely what's cryptographically guaranteed (no replay, no
+  cross-campaign or cross-recipient redirection, fixed reward terms) versus
+  what depends on trusting the attester today (that the predicate was
+  actually satisfied before signing).
+- **Final check on pool-touching routes**: audited the vendored
+  `@starkware-libs/starknet-privacy-sdk`'s `createPrivateTransfers` API
+  directly — it hard-requires a `provingProvider` (a URL or an explicit
+  proof-provider instance); there is no wallet-mediated fallback, and
+  `@starknet-io/get-starknet` (the wallet-connector library this app uses)
+  exposes no privacy-aware RPC method a browser wallet could handle on our
+  behalf. Combined with the `EMPTY_PROOF_FACTS` finding below, this closes
+  the question for good: there is no remaining legitimate route, browser
+  wallet or otherwise, onto the pool's state-changing entrypoints.
+
+None of the above required a contract redeploy.
 
 ## Attempted: pool-touching transactions
 

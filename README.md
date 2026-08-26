@@ -1,30 +1,37 @@
 # Prova Pass
 
-**Live demo:** [provah.vercel.app](https://provah.vercel.app/) · **Contract:** [`0x74614e0cd54af7e59987a5d74fdd028209feff01fc20eca2934fe80b94db402`](https://starkscan.co/contract/0x74614e0cd54af7e59987a5d74fdd028209feff01fc20eca2934fe80b94db402) · **7 mainnet transactions, 3 live campaigns:** see below · **Status:** [`STATUS.md`](STATUS.md)
+**Live demo:** [provah.vercel.app](https://provah.vercel.app/) · **Contract:** [`0x74614e0cd54af7e59987a5d74fdd028209feff01fc20eca2934fe80b94db402`](https://starkscan.co/contract/0x74614e0cd54af7e59987a5d74fdd028209feff01fc20eca2934fe80b94db402) · **10 mainnet transactions, 4 live campaigns, real STRK reward payouts on redeem:** see below · **Status:** [`STATUS.md`](STATUS.md)
 
 Prova Pass is not a selective-disclosure dashboard. It's a **capability
-layer**: a way to turn *any* provable fact about a private STRK20 balance
-into a bearer token that acts on-chain, redeemable from a wallet that has
-never touched the underlying assets and holds zero gas. The predicate can
-be a holding period, a balance threshold, a deposit count, or — because the
-contract never inspects what the predicate actually was, only that Prova
-attested to *something* — anything else you can evaluate against public
-chain data. The output is always the same primitive: a one-time,
-transferable, unlinkable capability. That primitive is what's new here, not
+layer**: a way to turn *any* provable fact about STRK20 pool activity — a
+holding period, a balance threshold, a deposit count, or anything else
+evaluable against public chain data — into a bearer token that acts
+on-chain, redeemable from a wallet that has never touched the underlying
+assets and holds zero gas. The contract never inspects what the predicate
+actually was, only that Prova attested to *something*. The output is
+always the same primitive: a one-time, transferable, unlinkable capability
+that can carry real value (a campaign can pay out a real ERC20 reward on
+redeem, not just record a claim). That primitive is what's new here, not
 any one campaign built on top of it.
 
 ## The primitive, in one paragraph
 
-A user proves something about holdings they never reveal. Prova signs a
-capability bound to a fresh nullifier and hands it back — not to a wallet,
-to the *user*, as a bearer token. That token can sit in a browser, get
-pasted into a Discord DM, or be printed as a QR code; it carries no wallet
-binding until the moment someone redeems it. Whoever redeems it chooses the
-destination wallet then and there, gas-sponsored, and the chain records
-only `(campaign_id, nullifier, recipient, signature)` — nothing that
-connects back to whoever originally qualified. This is the whole
-architecture: **private state in, portable capability out, consumed
-exactly once, from anywhere.**
+A wallet's **public** STRK20 pool activity — its deposit history, visible
+on-chain to anyone — is checked against a campaign's predicate. If it
+holds, Prova signs a capability bound to a fresh nullifier and hands it
+back — not to a wallet, to the *user*, as a bearer token. That token can
+sit in a browser, get pasted into a Discord DM, or be printed as a QR
+code; it carries no wallet binding until the moment someone redeems it.
+Whoever redeems it chooses the destination wallet then and there,
+gas-sponsored, and — if the campaign carries a reward — receives a real
+ERC20 payout in the same transaction. The chain records only
+`(campaign_id, nullifier, recipient, signature)` — nothing that connects
+back to whoever originally qualified. This is the whole architecture:
+**honest public eligibility in, a portable, value-bearing capability out,
+consumed exactly once, from anywhere.** See "What is private / what is
+not" below for exactly which part of this is private today and which
+isn't — the honest answer is *less than the name suggests*, and we say so
+plainly rather than let the word "private" carry more than it should.
 
 Built for the [STRK20 Private Sprint](https://github.com/starkience/strk20-hackathon)
 against the live mainnet privacy pool at
@@ -32,9 +39,10 @@ against the live mainnet privacy pool at
 
 ## Try the live demo
 
-1. Open [provah.vercel.app](https://provah.vercel.app/) — three campaigns
-   are live on it right now, each a different predicate type (see
-   "Multiple predicate types" below).
+1. Open [provah.vercel.app](https://provah.vercel.app/) — four campaigns
+   are live on it right now: three predicate types (see "Multiple
+   predicate types" below), plus one, "STRK Welcome Reward," that pays out
+   a real 0.05 STRK on redeem instead of just recording a claim.
 2. **Connect wallet A** — a wallet with real STRK20 deposit history — and
    click **Generate Prova Pass**. Prova checks the predicate against its
    public deposit events and hands back a pass tied to a fresh nullifier.
@@ -70,22 +78,31 @@ The claim side is equally generic: a campaign's `claim_kind` is
 or a provable one-time action), or `reward_token` (the contract also pays
 out `reward_amount` of `reward_token` to the recipient). Same contract
 entrypoint either way — `reward_amount = 0` is what makes a claim
-capability-only.
+capability-only. **This isn't theoretical:** the fourth live campaign,
+"STRK Welcome Reward" (`balance_threshold`, `reward_token`), funded the
+deployed `ProvaPass` contract with real STRK and executed a real claim —
+the recipient's on-chain STRK balance went from `0` to exactly
+`50000000000000000` wei (0.05 STRK), verified before and after via
+`balanceOf`, in the same transaction that consumed the nullifier. See
+`strk20.json` for the funding tx, campaign-creation tx, and claim tx.
 
 ## The flow
 
 1. A campaign owner deploys a **predicate** of one of the types above.
-2. A user with private STRK20 holdings requests a **Prova Pass** for that
-   campaign. Prova checks the predicate and, if satisfied, signs a one-time
-   capability bound to a fresh **nullifier** — this is the bearer token,
-   not yet addressed to any wallet.
+2. A user with STRK20 pool deposit history requests a **Prova Pass** for
+   that campaign. Prova checks the predicate against that history — public
+   on-chain data, not private note state — and, if satisfied, signs a
+   one-time capability bound to a fresh **nullifier**. This is the bearer
+   token, not yet addressed to any wallet.
 3. The user hands that token to *any* wallet — a brand-new, funding-free
    one, or literally anyone else's.
 4. That wallet calls `claim_with_prova_pass` on the `ProvaPass` contract.
-   The contract verifies Prova's signature and **consumes the nullifier**.
+   The contract verifies Prova's signature, **consumes the nullifier**, and
+   — if the campaign carries a reward — pays it out in the same
+   transaction.
 5. The token cannot be reused. Nothing on-chain, and nothing Prova stores,
-   links the claiming wallet back to the wallet whose holdings satisfied
-   the predicate.
+   links the claiming wallet back to the wallet whose deposit history
+   satisfied the predicate.
 
 ## What is private / what is not
 
@@ -131,11 +148,21 @@ produce. See `STATUS.md` for the full transcript of that attempt.
 Until that endpoint (hosted or self-run) exists, Prova's backend evaluates
 the predicate directly against the pool's *public* deposit history and
 signs the resulting capability — a server attestation, not a
-zero-knowledge proof. What stays trustless regardless: nobody, including
-Prova, can forge a pass for a predicate that doesn't hold, replay a pass,
-or use it on the wrong campaign — the ECDSA signature check and nullifier
-registry are enforced on-chain by `ProvaPass`, not by Prova's say-so at
-claim time.
+zero-knowledge proof. **Be precise about what that means for trust:**
+`ProvaPass.cairo` only ever checks that *some* signature from the
+attester's key exists over `(campaign_id, nullifier, recipient)` — it has
+no way to verify the predicate was actually satisfied. Whoever holds the
+attester's private key (today, only Prova) could sign a pass for a
+predicate that doesn't hold. That is the honest trust boundary, not
+something this v1 avoids. What *is* enforced on-chain, independent of
+Prova's honesty, once a signature exists: it cannot be replayed (the
+nullifier registry consumes it exactly once), it cannot be redirected to a
+different campaign or recipient than it was signed for (both are hashed
+into the signed message), and — for reward campaigns — the payout amount
+and token are fixed at campaign creation, not chosen by whoever claims.
+Swapping the attester's signature for a real per-claim ZK proof removes
+Prova from that trust position entirely; see below for exactly what
+changes.
 
 **Swapping the attester for a real proof is a backend-only change:**
 
@@ -243,9 +270,9 @@ node scripts/mainnet-admin.mjs create-campaign "STRK Loyalty Drop" 0x04718f5a0fc
 `ProvaPass` is live on Starknet mainnet at
 [`0x74614e0cd54af7e59987a5d74fdd028209feff01fc20eca2934fe80b94db402`](https://starkscan.co/contract/0x74614e0cd54af7e59987a5d74fdd028209feff01fc20eca2934fe80b94db402)
 (class hash `0x7adfeaf0d075cda33b3128fd9cc255e34e7b778e907cbb64216d76bd7cf89e6`),
-with **3 live campaigns** across all 3 predicate types. Seven real,
-confirmed mainnet transactions, machine-readable in
-[`strk20.json`](strk20.json):
+with **4 live campaigns** — the original 3 predicate types plus a live
+reward campaign that pays out real STRK on redeem. Ten real, confirmed
+mainnet transactions, machine-readable in [`strk20.json`](strk20.json):
 
 | # | Type | Hash |
 |---|---|---|
@@ -256,10 +283,27 @@ confirmed mainnet transactions, machine-readable in
 | 5 | `claim_with_prova_pass` — cross-wallet claim | [`0x5ebf46…9dce`](https://starkscan.co/tx/0x5ebf464f06bfe864f2ee875a4b8a84ab8032b31ced539300424067ae14f9dce) |
 | 6 | `create_campaign` — "STRK Holder Badge" (`balance_threshold`) | [`0x41c168…e9b3`](https://starkscan.co/tx/0x41c16869dcd1f3781e839f44b9ea86b867d872f4177e7790fee631d957de9b3) |
 | 7 | `create_campaign` — "Active Depositor" (`deposit_count`) | [`0x12aa67…4496`](https://starkscan.co/tx/0x12aa67bcb97507d402cbe8a7308fd9a6c7ad3a9088227e4a35ad96603284496) |
+| 8 | `transfer` — fund `ProvaPass` with 1 real STRK | [`0x76eeb4…7625`](https://starkscan.co/tx/0x76eeb4941bda080592816c3c51ca92da65c20de18c48e7d4782e90010927625) |
+| 9 | `create_campaign` — "STRK Welcome Reward" (`balance_threshold`, `reward_token`) | [`0x1a64f5…32c0`](https://starkscan.co/tx/0x1a64f5d8963b89118464d4613511b7f65eeb8ffb12f52df887e25404e5b32c0) |
+| 10 | `claim_with_prova_pass` — **real 0.05 STRK payout**, verified `0 → 50000000000000000` wei | [`0x45f6b0…14c`](https://starkscan.co/tx/0x45f6b0d60d1ef2b232885a416f562c16aea15365ea215efdd0db10c4da514c) |
 
-**Note on scope:** all seven transactions are against `ProvaPass`, the
-contract this project built on top of the pool's public deposit events —
-none of them are direct calls into the STRK20 pool contract itself. This
+Transaction 10's recipient (`0x4fdf9023…eb401f`) was a freshly generated
+address with zero prior chain history — its STRK balance was verified `0`
+before the claim and exactly `50000000000000000` wei (0.05 STRK) after,
+in the same transaction that consumed the nullifier. That claim was
+operator-attested via `mainnet-admin.mjs` to verify the payout mechanism
+end-to-end with real funds — the mechanism itself
+(`IERC20.transfer(recipient, reward_amount)` inside
+`claim_with_prova_pass`, gated only by `reward_amount > 0`) is live and
+general, exercised identically by any real user going through the
+deployed app's `/api/pass` → `/api/claim` flow. See `STATUS.md` for the
+full verification trail.
+
+**Note on scope:** transactions 1–7, 9, and 10 are against `ProvaPass`, the
+contract this project built on top of the pool's public deposit events;
+transaction 8 is a plain ERC20 `transfer` on the STRK token contract, used
+to fund `ProvaPass`. **None of the ten are direct calls into the STRK20
+pool contract itself.** This
 isn't for lack of trying: see "The attester today" above and `STATUS.md` for
 a real, on-chain-confirmed attempt — a hand-built `apply_actions` call for
 the pool's least-restrictive action (registering a viewing key, which needs

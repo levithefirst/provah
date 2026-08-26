@@ -1,6 +1,6 @@
 {
   "project": "Prova Pass",
-  "tagline": "A private-state capability layer: prove something about STRK20 holdings you never reveal, redeem it from any wallet.",
+  "tagline": "A capability layer for STRK20 pool activity: prove something about a wallet's public deposit history, redeem a one-time, value-bearing capability from any wallet.",
   "repo": "https://github.com/levithefirst/provah",
   "network": "mainnet",
   "chain_id": "SN_MAIN",
@@ -43,6 +43,24 @@
       "entrypoint": "create_campaign",
       "hash": "0x12aa67bcb97507d402cbe8a7308fd9a6c7ad3a9088227e4a35ad96603284496",
       "description": "Create 'Active Depositor' (predicate: deposit_count — >= 1 deposit into the pool). Third live campaign, a distinct activity-based predicate type."
+    },
+    {
+      "type": "invoke",
+      "entrypoint": "transfer",
+      "hash": "0x76eeb4941bda080592816c3c51ca92da65c20de18c48e7d4782e90010927625",
+      "description": "Fund the deployed ProvaPass contract with 1 real STRK from the operating account, so it can actually pay out reward_amount on claim, not just record a claim."
+    },
+    {
+      "type": "invoke",
+      "entrypoint": "create_campaign",
+      "hash": "0x1a64f5d8963b89118464d4613511b7f65eeb8ffb12f52df887e25404e5b32c0",
+      "description": "Create 'STRK Welcome Reward' (predicate: balance_threshold, claim_kind: reward_token — hold >= 1 STRK, redeem pays 0.05 real STRK). Fourth live campaign: proof that redeeming a Prova Pass can move real value, not just record a claim."
+    },
+    {
+      "type": "invoke",
+      "entrypoint": "claim_with_prova_pass",
+      "hash": "0x45f6b0d60d1ef2b232885a416f562c16aea15365ea215efdd0db10c4da514c",
+      "description": "Redeem a 'STRK Welcome Reward' pass to a brand-new, never-before-used address. Verified via balanceOf: the recipient's STRK balance went from exactly 0 to exactly 50000000000000000 wei (0.05 STRK) in this transaction, alongside the usual nullifier consumption. Operator-attested for verification (see STATUS.md); the reward-payout mechanism itself (IERC20.transfer in claim_with_prova_pass) is live for any real user going through /api/pass and /api/claim."
     }
   ],
   "contracts": [
@@ -73,6 +91,13 @@
       "id": "0x3d1270c552a597e11aaec052b7c8791a76fbb77ed946f36ffa7ba73325d35c3",
       "name": "Active Depositor",
       "predicate_type": "deposit_count"
+    },
+    {
+      "id": "0x3955f5ac939b8318744dcb640107c9e2801d2140e65d6e7c1f083b8792d3720",
+      "name": "STRK Welcome Reward",
+      "predicate_type": "balance_threshold",
+      "claim_kind": "reward_token",
+      "reward_amount_wei": "50000000000000000"
     }
   ],
   "demo_video": "",

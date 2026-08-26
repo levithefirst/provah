@@ -74,6 +74,23 @@ function claimKindTag(kind: string): string {
   }
 }
 
+function rewardLabel(c: Campaign): string | null {
+  if (c.claim_kind !== "reward_token" || BigInt(c.reward_amount || "0") === BigInt(0)) return null;
+  return `Redeeming pays ${formatStrk(c.reward_amount)} to the claiming wallet — a real transfer, not just a record.`;
+}
+
+function expiryLabel(c: Campaign): string {
+  const ms = Number(c.expiry) * 1000;
+  if (!Number.isFinite(ms) || ms <= 0) return "No expiry set";
+  const date = new Date(ms);
+  const isPast = ms < Date.now();
+  return `${isPast ? "Expired" : "Expires"} ${date.toLocaleDateString(undefined, {
+    year: "numeric",
+    month: "short",
+    day: "numeric",
+  })}`;
+}
+
 function encodePassToken(campaignId: string, nullifier: string): string {
   const json = JSON.stringify({ v: 1, campaignId, nullifier });
   return typeof window === "undefined" ? "" : window.btoa(json);
@@ -367,9 +384,17 @@ export default function ProvaApp() {
               <span className="text-xs px-2 py-0.5 rounded-full border border-neutral-700 text-neutral-300">
                 {claimKindTag(campaign.claim_kind)}
               </span>
+              <span className="text-xs px-2 py-0.5 rounded-full border border-neutral-800 text-neutral-500">
+                {expiryLabel(campaign)}
+              </span>
             </div>
             <p>{campaign.description}</p>
             <p className="mt-1">Predicate: {predicateLabel(campaign)}</p>
+            {rewardLabel(campaign) && (
+              <p className="mt-2 rounded-md border border-emerald-800 bg-emerald-500/10 px-2 py-1.5 text-emerald-300">
+                💰 {rewardLabel(campaign)}
+              </p>
+            )}
             {campaign.create_tx_hash && (
               <p className="mt-1 font-mono text-xs">
                 campaign tx:{" "}
@@ -388,7 +413,11 @@ export default function ProvaApp() {
       </section>
 
       <section className="flex flex-col gap-3 rounded-3xl border border-neutral-800 bg-neutral-900/40 p-6 sm:p-8">
-        <h2 className="text-lg font-medium">2. Connect your private wallet, generate a pass</h2>
+        <h2 className="text-lg font-medium">2. Connect the wallet with qualifying pool activity, generate a pass</h2>
+        <p className="text-xs text-neutral-500">
+          Prova checks this wallet&apos;s public STRK20 deposit history against the campaign&apos;s
+          predicate — it never sees or needs a private key, viewing key, or signature from it.
+        </p>
         <div className="flex gap-3 items-center">
           <button
             onClick={handleConnectProver}
@@ -409,6 +438,17 @@ export default function ProvaApp() {
         {pass && (
           <div className="flex flex-col gap-2">
             <p className="font-mono text-xs text-emerald-400 break-all">nullifier: {pass.nullifier}</p>
+            {campaign && rewardLabel(campaign) && (
+              <p className="rounded-md border border-emerald-800 bg-emerald-500/10 px-2 py-1.5 text-xs text-emerald-300">
+                💰 {rewardLabel(campaign)}
+              </p>
+            )}
+            <p className="rounded-md border border-amber-800 bg-amber-500/10 px-2 py-1.5 text-xs text-amber-300">
+              ⚠️ This is a pure bearer token, by design — anyone holding the raw text below can
+              redeem it to a destination wallet of <em>their</em> choosing. Prova does not support
+              locking a pass to one recipient. Treat it like cash: keep it secret until you hand it
+              off or redeem it yourself.
+            </p>
             <PassTokenExport pass={pass} />
           </div>
         )}

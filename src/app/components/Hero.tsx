@@ -63,8 +63,9 @@ export default function Hero() {
         </h1>
 
         <p className="mt-6 max-w-xl text-lg text-neutral-600">
-          Prove something about STRK20 holdings you never reveal. Get a one-time bearer
-          capability. Redeem it from any wallet on earth — with nothing on-chain linking the two.
+          Prove something about a wallet&apos;s STRK20 pool activity. Get a one-time bearer
+          capability — one that can carry a real reward, not just a record. Redeem it from any
+          wallet on earth, with nothing on-chain linking the two.
         </p>
 
         <div className="mt-10 flex flex-col gap-3 sm:flex-row">
