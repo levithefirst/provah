@@ -189,7 +189,7 @@ async function cmdPoolRegisterViewingKey({ dryRun }) {
   const call = { contractAddress: POOL_ADDRESS, entrypoint: "apply_actions", calldata };
 
   console.log("Estimating fee (dry run, no gas spent if this throws)...");
-  const estimate = await acc.estimateFee(call);
+  const estimate = await acc.estimateInvokeFee(call);
   console.log("fee estimate succeeded:", estimate.overall_fee?.toString?.() ?? estimate.suggestedMaxFee?.toString?.());
 
   if (dryRun) {
