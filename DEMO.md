@@ -58,10 +58,21 @@ qualified."
 
 - Try to claim again with the same token — show the on-chain revert
   (`nullifier consumed`).
-- Optionally: call `is_nullifier_consumed` as a view call to show it's
-  `true` — provable without trusting Prova's backend at all.
+- Click **Verify on-chain** in the UI right after the claim — narrate that
+  this isn't Provah's database talking, it's a fresh `is_nullifier_consumed`
+  call the browser itself makes against public RPC. Provable without
+  trusting Prova's backend at all.
 
-## 2:15 – 2:35 — Redeem doesn't just record a claim, it can pay one out
+## 2:15 – 2:20 — Optional: lock a pass to one wallet
+
+- Back on step 2, check **"Lock this pass to one destination wallet"** and
+  paste Wallet B's address before generating. Narrate: "by default this is
+  a pure bearer token — anyone gets to choose the destination. Checking
+  this box is the issuer choosing that destination instead, and the server
+  refuses to sign a claim to anyone else — not a UI restriction, enforced
+  in `/api/claim` before the attestation exists."
+
+## 2:20 – 2:40 — Redeem doesn't just record a claim, it can pay one out
 
 - Switch to the "STRK Welcome Reward" campaign. Generate and redeem a pass
   the same way. Pull up the recipient's STRK balance on Starkscan before
@@ -71,7 +82,7 @@ qualified."
   this payout path; we just funded the contract and pointed a campaign at
   it. Every reward campaign works exactly like this."
 
-## 2:35 – 2:55 — Why it matters: what's private, what's not
+## 2:40 – 2:55 — Why it matters: what's private, what's not
 
 - One line on the honest trust boundary: "the predicate check is evaluated
   against the pool's *public* deposit events, not hidden note state — and

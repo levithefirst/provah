@@ -21,17 +21,22 @@ on-chain to anyone — is checked against a campaign's predicate. If it
 holds, Prova signs a capability bound to a fresh nullifier and hands it
 back — not to a wallet, to the *user*, as a bearer token. That token can
 sit in a browser, get pasted into a Discord DM, or be printed as a QR
-code; it carries no wallet binding until the moment someone redeems it.
-Whoever redeems it chooses the destination wallet then and there,
+code; by default it carries no wallet binding until the moment someone
+redeems it, and the issuer can optionally lock it to one destination
+wallet at generation time instead — a real scope decision, not just a
+bearer-security disclaimer (see "Destination binding" below). Whoever
+redeems an unlocked pass chooses the destination wallet then and there,
 gas-sponsored, and — if the campaign carries a reward — receives a real
-ERC20 payout in the same transaction. The chain records only
-`(campaign_id, nullifier, recipient, signature)` — nothing that connects
-back to whoever originally qualified. This is the whole architecture:
-**honest public eligibility in, a portable, value-bearing capability out,
-consumed exactly once, from anywhere.** See "What is private / what is
-not" below for exactly which part of this is private today and which
-isn't — the honest answer is *less than the name suggests*, and we say so
-plainly rather than let the word "private" carry more than it should.
+ERC20 payout in the same transaction, independently verifiable from the
+claimer's own browser (see "Verify it yourself" below). The chain records
+only `(campaign_id, nullifier, recipient, signature)` — nothing that
+connects back to whoever originally qualified. This is the whole
+architecture: **honest public eligibility in, a portable, value-bearing
+capability out, consumed exactly once, from anywhere.** See "What is
+private / what is not" below for exactly which part of this is private
+today and which isn't — the honest answer is *less than the name
+suggests*, and we say so plainly rather than let the word "private" carry
+more than it should.
 
 Built for the [STRK20 Private Sprint](https://github.com/starkience/strk20-hackathon)
 against the live mainnet privacy pool at
@@ -54,7 +59,14 @@ against the live mainnet privacy pool at
    connect any wallet, and claim. This is the same bearer-token property,
    made literal and demoable.
 5. The resulting claim transaction is real, on mainnet, and contains
-   nothing that names wallet A.
+   nothing that names wallet A. Click **Verify on-chain** afterward — the
+   app reads `is_nullifier_consumed` straight from public RPC, not from
+   Provah's own database, and for the reward campaign shows the exact STRK
+   balance delta it observed in your browser before and after the claim.
+6. Before generating a pass, try checking **"Lock this pass to one
+   destination wallet"** and pasting an address — that pass will then only
+   ever be claimable by that one wallet; any other `recipient` is refused
+   server-side before Provah even signs.
 
 ## Multiple predicate types, one contract, one attester
 
@@ -85,6 +97,47 @@ the recipient's on-chain STRK balance went from `0` to exactly
 `50000000000000000` wei (0.05 STRK), verified before and after via
 `balanceOf`, in the same transaction that consumed the nullifier. See
 `strk20.json` for the funding tx, campaign-creation tx, and claim tx.
+
+## Destination binding
+
+A pass is a pure bearer token by default — anyone holding it chooses the
+destination wallet at claim time. That's the maximally-flexible form, but
+it isn't the only form the capability supports. At generation time, the
+holder of wallet A can optionally lock the pass to one destination address
+(`boundRecipient`, an additive, nullable column on `prova_passes`):
+`/api/claim` checks it *before* signing — `BigInt(pass.bound_recipient) !==
+BigInt(recipient)` returns `403` — so a locked pass genuinely cannot be
+redeemed anywhere else, not merely "shouldn't be." This turns "bearer
+token, by design, full stop" into an actual scope decision the issuer
+makes: pure bearer for hand-off scenarios (gift a capability to someone
+unknown at issuance time), or destination-bound for scenarios where the
+receiving wallet is already known and the extra guarantee is worth losing
+transferability. Nothing about the unlocked path changes — this is
+strictly additive.
+
+## Verify it yourself
+
+Every claim is independently checkable without trusting Provah's UI at
+all, straight from the browser's own public RPC connection
+(`https://rpc.starknet.lava.build`), against the live contracts:
+
+- **Nullifier consumption** — after a claim, click **Verify on-chain** and
+  the app calls `is_nullifier_consumed` directly on `ProvaPass` — the same
+  contract read anyone could make from a block explorer or their own
+  script. It does not go through Provah's backend or database at all.
+- **Reward delivery** — for reward campaigns, the app reads the claiming
+  wallet's STRK `balanceOf` immediately before and after the claim
+  transaction, both calls made client-side against the public RPC, and
+  shows the exact delta. "Redeem pays out a real reward" stops being an
+  assertion in a status message and becomes a number the browser itself
+  fetched from mainnet.
+
+Both checks reduce Provah's trust surface to exactly what "What is private
+/ what is not" already documents: the predicate evaluation is a signed
+attestation you have to trust; everything downstream of that signature —
+that a claim consumed a specific nullifier, that a reward moved a specific
+amount to a specific wallet — is independently auditable and never has to
+be taken on faith.
 
 ## The flow
 

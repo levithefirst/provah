@@ -13,8 +13,14 @@ unfunded wallet can redeem, gas-sponsored, with nothing on-chain linking the
 two. That primitive is proven four separate ways on the same deployed
 contract with zero redeploys between them; one of those four pays out a
 real ERC20 reward on redeem, verified on-chain wei-for-wei, so "redeem"
-means something moves, not just that a row gets written. A cross-wallet
-claim is a real mainnet transaction anyone can verify on Starkscan, and the
+means something moves, not just that a row gets written — and that payout
+is now independently checkable from the claimer's own browser against
+public RPC, not merely asserted by Provah's UI. A cross-wallet claim is a
+real mainnet transaction anyone can verify on Starkscan; its nullifier
+consumption is similarly checkable client-side with one click. The
+capability itself is no longer flat, either — an issuer can now lock a
+pass to one destination wallet at generation time, server-enforced before
+any signature exists, instead of pure-bearer being the only option. The
 one place we haven't reached full trustlessness — the predicate check is a
 signed attestation, not yet a client-side ZK proof — is disclosed plainly,
 with on-chain proof of *why* a proof-based version isn't possible yet (a
@@ -109,6 +115,44 @@ real users at it. The mechanism itself is not a special case: any campaign
 with `reward_amount > 0` pays out identically for any real user who goes
 through the live app's `/api/pass` → `/api/claim` flow, no code change
 required.
+
+## What shipped in this pass (destination binding + trust-surface reduction)
+
+Mandate for this pass: be ruthless about the remaining weaknesses — no real
+pool-touching transactions (still true, see below, re-confirmed), redeem
+still felt thin, eligibility is server attestation not private note state
+(unchanged, disclosed), and the capability itself was too flat (no way to
+scope a pass to a destination). This pass targeted what's actually
+shippable given the still-unpublished prover endpoint:
+
+- **Destination-bound capabilities.** `prova_passes` gained an additive,
+  nullable `bound_recipient` column. `/api/pass` accepts an optional
+  `boundRecipient`; `/api/claim` refuses (`403`) any claim whose recipient
+  doesn't match a set `bound_recipient`, checked *before* the attester signs
+  anything. This is a real scope decision the issuer now gets to make at
+  issuance — pure bearer (unchanged default) or destination-locked — not
+  just a stronger disclaimer on the same bearer-only model. Zero contract
+  changes, zero redeploy: enforced entirely in the attestation step, which
+  is exactly the boundary `ProvaPass.cairo` already trusts.
+- **Client-side, backend-independent verification.** The app now calls
+  `is_nullifier_consumed` directly against `ProvaPass` from the browser's
+  own `RpcProvider` (public Lava RPC), after every claim — a "Verify
+  on-chain" button that doesn't touch Provah's API or database at all. For
+  reward campaigns, the app also reads the claiming wallet's STRK
+  `balanceOf` immediately before and after the claim, both client-side, and
+  shows the observed delta. This directly answers "redeem currently does
+  almost nothing valuable, mostly a receipt": redeeming a reward pass now
+  visibly moves a specific, browser-verified amount of STRK, with the
+  verification step itself independent of trusting Provah's UI.
+- **Fresh recheck of the pool-interaction blocker** (see "Attempted:
+  pool-touching transactions" below) — issue #147 on the hackathon repo is
+  still open with zero maintainer replies as of this pass. No new route
+  appeared; the `EMPTY_PROOF_FACTS` finding and the `provingProvider`
+  hard-requirement in the vendored SDK both stand. P0 effort accordingly
+  went entirely into what's actually reachable: destination binding and
+  independent verification, above.
+
+None of the above required a contract redeploy.
 
 ## What shipped in this pass (capability-layer generalization)
 

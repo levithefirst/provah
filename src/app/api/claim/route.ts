@@ -40,6 +40,15 @@ export async function POST(req: NextRequest) {
     if (pass.status !== "issued") {
       return NextResponse.json({ ok: false, error: `pass already ${pass.status}` }, { status: 409 });
     }
+    // If this pass was locked to one destination wallet at issuance, refuse
+    // to attest a claim to any other recipient — enforced before signing,
+    // not just documented as a bearer-security caveat.
+    if (pass.bound_recipient && BigInt(pass.bound_recipient) !== BigInt(recipient)) {
+      return NextResponse.json(
+        { ok: false, error: "this pass is locked to a different destination wallet" },
+        { status: 403 }
+      );
+    }
 
     const sig = signAttestation(BigInt(campaignId), BigInt(nullifier), BigInt(recipient));
 

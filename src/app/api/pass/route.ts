@@ -17,9 +17,22 @@ export async function POST(req: NextRequest) {
     const campaignId: string = body.campaignId;
     const proverAddress: string = body.proverAddress; // the address whose deposit history is checked
     const salt: string = body.salt ?? "0x" + Date.now().toString(16);
+    // Optional: lock this pass to one destination wallet, chosen now instead
+    // of at claim time. Turns the default pure-bearer capability into a
+    // recipient-bound one — a real scope decision the issuer gets to make,
+    // not just a bearer-security disclaimer. Enforced server-side in
+    // /api/claim before the attester ever signs a different recipient.
+    const boundRecipient: string | null = body.boundRecipient || null;
 
     if (!campaignId || !proverAddress) {
       return NextResponse.json({ ok: false, error: "campaignId and proverAddress required" }, { status: 400 });
+    }
+    if (boundRecipient !== null) {
+      try {
+        BigInt(boundRecipient);
+      } catch {
+        return NextResponse.json({ ok: false, error: "boundRecipient must be a valid address" }, { status: 400 });
+      }
     }
 
     const { rows } = await db().query(`SELECT * FROM campaigns WHERE id = $1`, [campaignId]);
@@ -56,9 +69,9 @@ export async function POST(req: NextRequest) {
     const expiresAt = new Date(Number(campaign.expiry) * 1000);
 
     await db().query(
-      `INSERT INTO prova_passes (nullifier, campaign_id, predicate_hash, issuer_commitment, signature_r, signature_s, expires_at)
-       VALUES ($1,$2,$3,$4,$5,$6,$7)`,
-      [nullifierHex, campaignId, campaign.predicate_hash, issuerCommitment, "0x0", "0x0", expiresAt]
+      `INSERT INTO prova_passes (nullifier, campaign_id, predicate_hash, issuer_commitment, signature_r, signature_s, expires_at, bound_recipient)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8)`,
+      [nullifierHex, campaignId, campaign.predicate_hash, issuerCommitment, "0x0", "0x0", expiresAt, boundRecipient]
     );
 
     return NextResponse.json({
@@ -66,9 +79,12 @@ export async function POST(req: NextRequest) {
       campaignId,
       nullifier: nullifierHex,
       predicateHash: campaign.predicate_hash,
-      // The recipient (fresh wallet) is chosen and signed at claim time, not here.
-      message:
-        "Pass issued. Call /api/claim with { campaignId, nullifier, recipient } from any wallet to redeem it.",
+      boundRecipient,
+      // Unless boundRecipient was set, the recipient (fresh wallet) is chosen
+      // and signed at claim time, not here.
+      message: boundRecipient
+        ? `Pass issued, locked to ${boundRecipient}. Only that wallet can claim it.`
+        : "Pass issued. Call /api/claim with { campaignId, nullifier, recipient } from any wallet to redeem it.",
       evidenceCount: evidence.length,
     });
   } catch (err) {

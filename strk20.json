@@ -100,6 +100,10 @@
       "reward_amount_wei": "50000000000000000"
     }
   ],
+  "features": {
+    "destination_binding": "A pass can optionally be locked to one destination wallet at issuance (bound_recipient), instead of the default pure-bearer model. /api/claim rejects any other recipient with 403 before the attester ever signs. Additive, opt-in, does not change the unlocked path.",
+    "client_side_verification": "The app independently verifies claims from the browser's own public RPC connection, not through Provah's backend: is_nullifier_consumed read directly on ProvaPass after a claim, and STRK balanceOf diffed before/after for reward campaigns to show the exact payout observed on mainnet."
+  },
   "demo_video": "",
   "demo_url": "https://provah.vercel.app/"
 }

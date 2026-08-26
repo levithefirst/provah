@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { connect, disconnect } from "@starknet-io/get-starknet";
+import { RpcProvider } from "starknet";
 
 type Campaign = {
   id: string;
@@ -24,9 +25,38 @@ type LocalPass = {
   campaignName: string;
   nullifier: string;
   createdAt: number;
+  boundRecipient?: string | null;
 };
 
 const LOCAL_PASSES_KEY = "prova_local_passes_v1";
+
+// Public, non-secret values: the same mainnet RPC and deployed contract
+// address published in README/strk20.json. Used client-side purely for
+// read-only verification calls, so a user (or a judge) can confirm a claim
+// really landed on-chain without trusting Provah's backend at all.
+const PUBLIC_RPC_URL = "https://rpc.starknet.lava.build:443/rpc/v0_9";
+const PROVA_PASS_CONTRACT_ADDRESS = "0x74614e0cd54af7e59987a5d74fdd028209feff01fc20eca2934fe80b94db402";
+
+async function verifyNullifierOnChain(nullifier: string): Promise<boolean> {
+  const provider = new RpcProvider({ nodeUrl: PUBLIC_RPC_URL });
+  const result = await provider.callContract({
+    contractAddress: PROVA_PASS_CONTRACT_ADDRESS,
+    entrypoint: "is_nullifier_consumed",
+    calldata: [nullifier],
+  });
+  return BigInt(result[0] ?? "0x0") === BigInt(1);
+}
+
+async function fetchStrkBalance(address: string): Promise<bigint> {
+  const provider = new RpcProvider({ nodeUrl: PUBLIC_RPC_URL });
+  const STRK = "0x04718f5a0fc34cc1af16a1cdee98ffb20c31f5cd61d6ab07201858f4287c938d";
+  const result = await provider.callContract({
+    contractAddress: STRK,
+    entrypoint: "balanceOf",
+    calldata: [address],
+  });
+  return BigInt(result[0] ?? "0x0");
+}
 
 function short(addr: string | null | undefined) {
   if (!addr) return "none";
@@ -210,6 +240,12 @@ export default function ProvaApp() {
   const [redeemTx, setRedeemTx] = useState<string | null>(null);
   const [redeemStatus, setRedeemStatus] = useState<string>("");
   const [campaignsLoading, setCampaignsLoading] = useState(true);
+  const [lockPass, setLockPass] = useState(false);
+  const [lockRecipient, setLockRecipient] = useState("");
+  const [claimVerify, setClaimVerify] = useState<"idle" | "checking" | "confirmed" | "failed">("idle");
+  const [redeemVerify, setRedeemVerify] = useState<"idle" | "checking" | "confirmed" | "failed">("idle");
+  const [claimBalanceDelta, setClaimBalanceDelta] = useState<string | null>(null);
+  const [redeemBalanceDelta, setRedeemBalanceDelta] = useState<string | null>(null);
 
   useEffect(() => {
     setLocalPasses(loadLocalPasses());
@@ -255,13 +291,21 @@ export default function ProvaApp() {
 
   async function handleGeneratePass() {
     if (!campaign || !proverWallet) return;
+    if (lockPass && !lockRecipient.trim()) {
+      setStatus("Enter the wallet address to lock this pass to, or turn off locking.");
+      return;
+    }
     setBusy(true);
     setStatus("Evaluating predicate against your public deposit history…");
     try {
       const res = await fetch("/api/pass", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ campaignId: campaign.id, proverAddress: proverWallet }),
+        body: JSON.stringify({
+          campaignId: campaign.id,
+          proverAddress: proverWallet,
+          boundRecipient: lockPass ? lockRecipient.trim() : undefined,
+        }),
       });
       const data = await res.json();
       if (!res.ok) {
@@ -273,10 +317,15 @@ export default function ProvaApp() {
           campaignName: campaign.name,
           nullifier: data.nullifier,
           createdAt: Date.now(),
+          boundRecipient: data.boundRecipient ?? null,
         };
         setPass(newPass);
         addLocalPass(newPass);
-        setStatus("Pass issued. Disconnect, then connect a completely different wallet to claim.");
+        setStatus(
+          data.boundRecipient
+            ? `Pass issued, locked to ${short(data.boundRecipient)}. Only that wallet can claim it.`
+            : "Pass issued. Disconnect, then connect a completely different wallet to claim."
+        );
         await disconnect();
         setProverWallet(null);
       }
@@ -299,8 +348,16 @@ export default function ProvaApp() {
   async function handleClaim() {
     if (!campaign || !pass || !claimWallet) return;
     setBusy(true);
-    setStatus("Submitting claim on-chain (gasless: Provah relays it)…");
+    setClaimVerify("idle");
+    setClaimBalanceDelta(null);
+    const hasReward = !!rewardLabel(campaign);
+    setStatus(
+      hasReward
+        ? "Checking your STRK balance, then submitting claim on-chain (gasless: Provah relays it)…"
+        : "Submitting claim on-chain (gasless: Provah relays it)…"
+    );
     try {
+      const before = hasReward ? await fetchStrkBalance(claimWallet).catch(() => null) : null;
       const res = await fetch("/api/claim", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -312,11 +369,29 @@ export default function ProvaApp() {
       } else {
         setClaimTx(data.txHash);
         setStatus("Claimed. The nullifier is now consumed, this pass cannot be reused.");
+        if (hasReward && before !== null) {
+          const after = await fetchStrkBalance(claimWallet).catch(() => null);
+          if (after !== null) {
+            const delta = after - before;
+            setClaimBalanceDelta(delta > BigInt(0) ? formatStrk(delta.toString()) : null);
+          }
+        }
       }
     } catch {
       setStatus("Failed to reach Provah.");
     } finally {
       setBusy(false);
+    }
+  }
+
+  async function handleVerifyClaim() {
+    if (!claimTx || !pass) return;
+    setClaimVerify("checking");
+    try {
+      const consumed = await verifyNullifierOnChain(pass.nullifier);
+      setClaimVerify(consumed ? "confirmed" : "failed");
+    } catch {
+      setClaimVerify("failed");
     }
   }
 
@@ -336,8 +411,13 @@ export default function ProvaApp() {
       return;
     }
     setBusy(true);
-    setRedeemStatus("Submitting claim on-chain (gasless)…");
+    setRedeemVerify("idle");
+    setRedeemBalanceDelta(null);
+    const redeemCampaign = campaigns.find((c) => c.id === decoded.campaignId);
+    const hasReward = redeemCampaign ? !!rewardLabel(redeemCampaign) : false;
+    setRedeemStatus(hasReward ? "Checking your STRK balance, then submitting claim on-chain (gasless)…" : "Submitting claim on-chain (gasless)…");
     try {
+      const before = hasReward ? await fetchStrkBalance(redeemWallet).catch(() => null) : null;
       const res = await fetch("/api/claim", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -353,11 +433,30 @@ export default function ProvaApp() {
       } else {
         setRedeemTx(data.txHash);
         setRedeemStatus("Claimed. This pass token is now worthless to anyone else, the nullifier is consumed.");
+        if (hasReward && before !== null) {
+          const after = await fetchStrkBalance(redeemWallet).catch(() => null);
+          if (after !== null) {
+            const delta = after - before;
+            setRedeemBalanceDelta(delta > BigInt(0) ? formatStrk(delta.toString()) : null);
+          }
+        }
       }
     } catch {
       setRedeemStatus("Failed to reach Provah.");
     } finally {
       setBusy(false);
+    }
+  }
+
+  async function handleVerifyRedeem() {
+    const decoded = decodePassToken(redeemToken);
+    if (!redeemTx || !decoded) return;
+    setRedeemVerify("checking");
+    try {
+      const consumed = await verifyNullifierOnChain(decoded.nullifier);
+      setRedeemVerify(consumed ? "confirmed" : "failed");
+    } catch {
+      setRedeemVerify("failed");
     }
   }
 
@@ -457,6 +556,24 @@ export default function ProvaApp() {
           </button>
           <span className="font-mono text-sm text-neutral-500 dark:text-neutral-400">{short(proverWallet)}</span>
         </div>
+        <label className="flex items-center gap-2 text-sm text-neutral-700 dark:text-neutral-300">
+          <input
+            type="checkbox"
+            checked={lockPass}
+            onChange={(e) => setLockPass(e.target.checked)}
+            className="h-4 w-4 rounded border-neutral-400 dark:border-neutral-600"
+          />
+          Lock this pass to one destination wallet (optional)
+        </label>
+        {lockPass && (
+          <input
+            type="text"
+            value={lockRecipient}
+            onChange={(e) => setLockRecipient(e.target.value)}
+            placeholder="0x… destination wallet address"
+            className="rounded-md border border-neutral-300 bg-white px-3 py-2 font-mono text-xs text-neutral-900 transition-colors focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/40 dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-100"
+          />
+        )}
         <button
           onClick={handleGeneratePass}
           disabled={busy || !proverWallet || !campaign}
@@ -474,12 +591,18 @@ export default function ProvaApp() {
                 💰 {rewardLabel(campaign)}
               </p>
             )}
-            <p className="rounded-md border border-amber-300 bg-amber-50 px-2 py-1.5 text-xs text-amber-800 dark:border-amber-800 dark:bg-amber-500/10 dark:text-amber-300">
-              ⚠️ This is a pure bearer token, by design. Anyone holding the raw text below can
-              redeem it to a destination wallet of <em>their</em> choosing. Provah does not support
-              locking a pass to one recipient. Treat it like cash: keep it secret until you hand it
-              off or redeem it yourself.
-            </p>
+            {pass.boundRecipient ? (
+              <p className="rounded-md border border-indigo-300 bg-indigo-50 px-2 py-1.5 text-xs text-indigo-800 dark:border-indigo-800 dark:bg-indigo-500/10 dark:text-indigo-300">
+                🔒 Locked to {short(pass.boundRecipient)}. Only that wallet can claim it — Provah
+                refuses to attest a claim to any other recipient.
+              </p>
+            ) : (
+              <p className="rounded-md border border-amber-300 bg-amber-50 px-2 py-1.5 text-xs text-amber-800 dark:border-amber-800 dark:bg-amber-500/10 dark:text-amber-300">
+                ⚠️ This is a pure bearer token, by design. Anyone holding the raw text below can
+                redeem it to a destination wallet of <em>their</em> choosing. Treat it like cash:
+                keep it secret until you hand it off or redeem it yourself.
+              </p>
+            )}
             <PassTokenExport pass={pass} />
           </div>
         )}
@@ -510,17 +633,44 @@ export default function ProvaApp() {
           Claim
         </button>
         {claimTx && (
-          <p className="rounded-md border border-emerald-300 bg-emerald-50 px-3 py-2 font-mono text-xs text-emerald-700 break-all dark:border-emerald-800 dark:bg-emerald-500/10 dark:text-emerald-300">
-            ✅ claim tx:{" "}
-            <a
-              className="underline hover:text-emerald-900 dark:hover:text-emerald-200"
-              href={`https://starkscan.co/tx/${claimTx}`}
-              target="_blank"
-              rel="noreferrer"
-            >
-              {claimTx}
-            </a>
-          </p>
+          <div className="flex flex-col gap-2">
+            <p className="rounded-md border border-emerald-300 bg-emerald-50 px-3 py-2 font-mono text-xs text-emerald-700 break-all dark:border-emerald-800 dark:bg-emerald-500/10 dark:text-emerald-300">
+              ✅ claim tx:{" "}
+              <a
+                className="underline hover:text-emerald-900 dark:hover:text-emerald-200"
+                href={`https://starkscan.co/tx/${claimTx}`}
+                target="_blank"
+                rel="noreferrer"
+              >
+                {claimTx}
+              </a>
+            </p>
+            {claimBalanceDelta && (
+              <p className="rounded-md border border-emerald-300 bg-emerald-50 px-3 py-2 text-xs text-emerald-700 dark:border-emerald-800 dark:bg-emerald-500/10 dark:text-emerald-300">
+                💰 +{claimBalanceDelta} STRK confirmed in wallet B, verified from your own browser,
+                not just asserted by Provah.
+              </p>
+            )}
+            <div className="flex items-center gap-2">
+              <button
+                onClick={handleVerifyClaim}
+                disabled={claimVerify === "checking"}
+                className="self-start rounded-md border border-neutral-400 px-3 py-1.5 text-xs font-medium text-neutral-900 transition-all hover:border-neutral-600 disabled:pointer-events-none disabled:opacity-50 dark:border-neutral-600 dark:text-neutral-100 dark:hover:border-neutral-400"
+              >
+                {claimVerify === "checking" ? "Checking chain…" : "Verify on-chain"}
+              </button>
+              {claimVerify === "confirmed" && (
+                <span className="text-xs text-emerald-700 dark:text-emerald-300">
+                  ✓ nullifier confirmed consumed on mainnet, read directly via public RPC
+                </span>
+              )}
+              {claimVerify === "failed" && (
+                <span className="text-xs text-amber-700 dark:text-amber-400">
+                  Could not confirm via public RPC — try again shortly.
+                </span>
+              )}
+            </div>
+          </div>
         )}
       </section>
 
@@ -584,17 +734,44 @@ export default function ProvaApp() {
         </button>
         {redeemStatus && <p className="text-sm text-neutral-600 dark:text-neutral-400">{redeemStatus}</p>}
         {redeemTx && (
-          <p className="rounded-md border border-emerald-300 bg-emerald-50 px-3 py-2 font-mono text-xs text-emerald-700 break-all dark:border-emerald-800 dark:bg-emerald-500/10 dark:text-emerald-300">
-            ✅ claim tx:{" "}
-            <a
-              className="underline hover:text-emerald-900 dark:hover:text-emerald-200"
-              href={`https://starkscan.co/tx/${redeemTx}`}
-              target="_blank"
-              rel="noreferrer"
-            >
-              {redeemTx}
-            </a>
-          </p>
+          <div className="flex flex-col gap-2">
+            <p className="rounded-md border border-emerald-300 bg-emerald-50 px-3 py-2 font-mono text-xs text-emerald-700 break-all dark:border-emerald-800 dark:bg-emerald-500/10 dark:text-emerald-300">
+              ✅ claim tx:{" "}
+              <a
+                className="underline hover:text-emerald-900 dark:hover:text-emerald-200"
+                href={`https://starkscan.co/tx/${redeemTx}`}
+                target="_blank"
+                rel="noreferrer"
+              >
+                {redeemTx}
+              </a>
+            </p>
+            {redeemBalanceDelta && (
+              <p className="rounded-md border border-emerald-300 bg-emerald-50 px-3 py-2 text-xs text-emerald-700 dark:border-emerald-800 dark:bg-emerald-500/10 dark:text-emerald-300">
+                💰 +{redeemBalanceDelta} STRK confirmed in your wallet, verified from your own
+                browser, not just asserted by Provah.
+              </p>
+            )}
+            <div className="flex items-center gap-2">
+              <button
+                onClick={handleVerifyRedeem}
+                disabled={redeemVerify === "checking"}
+                className="self-start rounded-md border border-neutral-400 px-3 py-1.5 text-xs font-medium text-neutral-900 transition-all hover:border-neutral-600 disabled:pointer-events-none disabled:opacity-50 dark:border-neutral-600 dark:text-neutral-100 dark:hover:border-neutral-400"
+              >
+                {redeemVerify === "checking" ? "Checking chain…" : "Verify on-chain"}
+              </button>
+              {redeemVerify === "confirmed" && (
+                <span className="text-xs text-emerald-700 dark:text-emerald-300">
+                  ✓ nullifier confirmed consumed on mainnet, read directly via public RPC
+                </span>
+              )}
+              {redeemVerify === "failed" && (
+                <span className="text-xs text-amber-700 dark:text-amber-400">
+                  Could not confirm via public RPC — try again shortly.
+                </span>
+              )}
+            </div>
+          </div>
         )}
       </section>
     </div>
