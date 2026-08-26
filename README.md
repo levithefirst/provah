@@ -1,15 +1,31 @@
 # Prova Pass
 
-**Private STRK20 state → a ZK-eligibility capability → consumed once, from a completely different wallet.**
+**Live demo:** [provah.vercel.app](https://provah.vercel.app/) · **Contract:** [`0x74614e0cd54af7e59987a5d74fdd028209feff01fc20eca2934fe80b94db402`](https://starkscan.co/contract/0x74614e0cd54af7e59987a5d74fdd028209feff01fc20eca2934fe80b94db402) · **Mainnet transactions:** see below · **Status:** [`STATUS.md`](STATUS.md)
 
-STRK20 keeps your assets private. Prova lets you *use* that private state — unlock a
-reward, claim an allowlist spot, prove a loyalty threshold — without ever
-publishing a link between the wallet that holds the assets and the wallet
-that claims the outcome.
+Prova Pass turns a private STRK20 balance into a portable, one-time
+capability. A user proves something about holdings they never reveal — "held
+≥ X of asset Y for ≥ N days" — and receives a signed pass bound to a fresh
+nullifier. That pass can be redeemed from *any* wallet, including one that
+has never touched the qualifying assets and holds zero gas. The claim
+transaction is public; nothing on-chain, and nothing Prova stores, links it
+back to the wallet whose private holdings satisfied the predicate.
 
 Built for the [STRK20 Private Sprint](https://github.com/starkience/strk20-hackathon)
 against the live mainnet privacy pool at
 `0x040337b1af3c663e86e333bab5a4b28da8d4652a15a69beee2b677776ffe812a`.
+
+## Try the live demo
+
+1. Open [provah.vercel.app](https://provah.vercel.app/) — the "STRK Loyalty
+   Drop" campaign (held ≥ 1 STRK for ≥ 7 days) is live on it.
+2. **Connect wallet A** — a wallet with real STRK20 deposit history — and
+   click **Generate Prova Pass**. Prova checks the predicate against its
+   public deposit events and hands back a pass tied to a fresh nullifier.
+3. Disconnect wallet A. **Connect wallet B** — any other wallet, funded or
+   not — and click **Claim**. The transaction is gas-sponsored by Prova, so
+   wallet B never needs to hold STRK.
+4. The resulting claim transaction is real, on mainnet, and contains nothing
+   that names wallet A.
 
 ## The flow
 
@@ -138,13 +154,28 @@ node scripts/mainnet-admin.mjs create-campaign "STRK Loyalty Drop" 0x04718f5a0fc
 
 ## Mainnet transactions
 
-**Live on Starknet mainnet.** `ProvaPass` is deployed at
-`0x74614e0cd54af7e59987a5d74fdd028209feff01fc20eca2934fe80b94db402`
+`ProvaPass` is live on Starknet mainnet at
+[`0x74614e0cd54af7e59987a5d74fdd028209feff01fc20eca2934fe80b94db402`](https://starkscan.co/contract/0x74614e0cd54af7e59987a5d74fdd028209feff01fc20eca2934fe80b94db402)
 (class hash `0x7adfeaf0d075cda33b3128fd9cc255e34e7b778e907cbb64216d76bd7cf89e6`).
-Five real, confirmed mainnet transactions — account deployment, declare,
-deploy, `create_campaign`, and a `claim_with_prova_pass` redeemed from a
-wallet unrelated to the qualifying holder — are recorded with their hashes
-in [`strk20.json`](strk20.json); see `STATUS.md` for the full breakdown.
+Five real, confirmed mainnet transactions, machine-readable in
+[`strk20.json`](strk20.json):
+
+| # | Type | Hash |
+|---|---|---|
+| 1 | `deploy_account` — operating account | [`0x266ff3…c010`](https://starkscan.co/tx/0x266ff30feda87e59c13eeccf122af1d82aaf92088d95cf7dcbff91f44c3c010) |
+| 2 | `declare` — ProvaPass class | [`0x1d57d6…1153`](https://starkscan.co/tx/0x1d57d647ff240ff4c02d9fb255bbaf80bc5238f8091483f33505c0ca3011153) |
+| 3 | `deploy` — ProvaPass instance | [`0x79375d…c70a`](https://starkscan.co/tx/0x79375d773a91d5726a9bf896e114bc7549003f05c7decd685a0bce5b47dc70a) |
+| 4 | `create_campaign` — "STRK Loyalty Drop" | [`0x758de9…26e6`](https://starkscan.co/tx/0x758de909a13df099cd72a1ef843217805d04ab761ab57e2bcd4c0f924c126e6) |
+| 5 | `claim_with_prova_pass` — cross-wallet claim | [`0x5ebf46…9dce`](https://starkscan.co/tx/0x5ebf464f06bfe864f2ee875a4b8a84ab8032b31ced539300424067ae14f9dce) |
+
+**Note on scope:** all five transactions are against `ProvaPass`, the
+contract this project built on top of the pool's public deposit events —
+none of them are direct calls into the STRK20 pool contract itself. That's
+a deliberate consequence of the same gap documented above: the pool's
+state-changing entrypoints only accept calls through a mainnet
+transaction-prover service whose endpoint isn't publicly published (see
+"What is private / what is not" and `STATUS.md`). Prova reads the pool's
+public `Deposit` events directly; it does not write to the pool.
 
 ## License
 

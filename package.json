@@ -1,6 +1,7 @@
 {
-  "name": "provah",
-  "version": "0.1.0",
+  "name": "prova-pass",
+  "version": "1.0.0",
+  "description": "Private STRK20 state, turned into a one-time capability claimable from any wallet.",
   "private": true,
   "scripts": {
     "dev": "next dev",

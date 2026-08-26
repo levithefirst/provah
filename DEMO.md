@@ -1,9 +1,11 @@
 # Prova Pass — 3-minute demo script
 
+**Live app:** https://provah.vercel.app/ — the "STRK Loyalty Drop" campaign
+is already live on it, so no setup is required to demo the read side.
+
 **Setup before recording:** two Starknet wallets in the browser (or two
-browser profiles) — Wallet A (holds real STRK20 deposits) and Wallet B (a
-brand-new wallet with zero balance). A campaign already created on-chain
-(see README "Running it yourself").
+browser profiles) — Wallet A (holds real STRK20 deposits satisfying the
+campaign's predicate) and Wallet B (a brand-new wallet with zero balance).
 
 ## 0:00 – 0:20 — The problem
 "STRK20 makes your Starknet holdings private. But private state is a dead
@@ -36,7 +38,7 @@ no on-chain link to the one that holds the assets."
 - Optionally: call `is_nullifier_consumed` as a view call to show it's
   `true` — provable without trusting Prova's backend at all.
 
-## 2:10 – 2:40 — What's private, what's not (the honest cut)
+## 2:10 – 2:40 — Why it matters: what's private, what's not
 - Walk through the README's table live: deposits are public by STRK20's
   own design (show the `Deposit` event on Starkscan); what Prova adds is
   the *unlinkable claim*, enforced by an on-chain nullifier registry.

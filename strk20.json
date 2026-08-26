@@ -1,4 +1,8 @@
 {
+  "project": "Prova Pass",
+  "repo": "https://github.com/levithefirst/provah",
+  "network": "mainnet",
+  "chain_id": "SN_MAIN",
   "transactions": [
     {
       "type": "deploy_account",
