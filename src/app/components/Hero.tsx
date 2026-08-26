@@ -1,7 +1,9 @@
+import { Lock, Ticket, Unlock } from "lucide-react";
+
 const NODES = [
-  { icon: "🔒", label: "Wallet A", sub: "proves eligibility", tone: "neutral" },
-  { icon: "🎫", label: "Capability", sub: "one-time, bearer", tone: "indigo" },
-  { icon: "🔓", label: "Wallet B", sub: "claims it, zero gas", tone: "emerald" },
+  { Icon: Lock, label: "Wallet A", sub: "proves eligibility", tone: "neutral" },
+  { Icon: Ticket, label: "Capability", sub: "one-time, bearer", tone: "indigo" },
+  { Icon: Unlock, label: "Wallet B", sub: "claims it, zero gas", tone: "emerald" },
 ] as const;
 
 const TONE_CLASSES: Record<string, string> = {
@@ -20,9 +22,9 @@ function HeroFlow() {
         {NODES.map((n, i) => (
           <div key={n.label} className="flex items-center gap-3 sm:gap-4">
             <div
-              className={`flex min-w-[9rem] flex-col items-center gap-1.5 rounded-2xl border px-5 py-4 transition-transform hover:-translate-y-0.5 ${TONE_CLASSES[n.tone]}`}
+              className={`flex min-w-[9rem] flex-col items-center gap-1.5 rounded-2xl border px-5 py-4 transition-all duration-300 hover:-translate-y-0.5 ${TONE_CLASSES[n.tone]}`}
             >
-              <span className="text-2xl">{n.icon}</span>
+              <n.Icon className="h-6 w-6" strokeWidth={1.75} />
               <span className="text-xs font-semibold uppercase tracking-wide opacity-70">{n.label}</span>
               <span className="text-sm font-medium">{n.sub}</span>
             </div>
@@ -59,12 +61,7 @@ export default function Hero() {
       <div className="pointer-events-none absolute -top-32 left-1/2 h-[32rem] w-[32rem] -translate-x-1/2 rounded-full bg-indigo-200/40 blur-3xl dark:bg-indigo-500/10" />
 
       <div className="relative mx-auto flex max-w-6xl flex-col items-center px-6 pb-24 pt-20 text-center sm:pt-28">
-        <span className="inline-flex items-center gap-2 rounded-full border border-neutral-200 bg-white px-4 py-1.5 text-xs font-medium text-neutral-600 shadow-sm dark:border-neutral-800 dark:bg-neutral-900 dark:text-neutral-400">
-          <span className="h-1.5 w-1.5 rounded-full bg-emerald-500" />
-          Live on Starknet mainnet: real transactions, not a demo
-        </span>
-
-        <h1 className="mt-8 max-w-3xl text-4xl font-semibold tracking-tight text-neutral-900 sm:text-6xl dark:text-neutral-50">
+        <h1 className="max-w-3xl text-4xl font-semibold tracking-tight text-neutral-900 sm:text-6xl dark:text-neutral-50">
           Private eligibility,
           <span className="block text-indigo-600 dark:text-indigo-400">a capability anyone can redeem.</span>
         </h1>
@@ -78,7 +75,7 @@ export default function Hero() {
         <div className="mt-10 flex flex-col gap-3 sm:flex-row">
           <a
             href="#app"
-            className="rounded-full bg-neutral-900 px-7 py-3.5 text-sm font-semibold text-white shadow-lg shadow-neutral-900/10 transition-all hover:-translate-y-0.5 hover:bg-neutral-800 active:translate-y-0 dark:bg-white dark:text-neutral-900 dark:shadow-none dark:hover:bg-neutral-200"
+            className="rounded-full bg-neutral-900 px-7 py-3.5 text-sm font-semibold text-white shadow-lg shadow-neutral-900/10 transition-all duration-150 hover:-translate-y-0.5 hover:bg-neutral-800 active:translate-y-0 active:scale-[0.97] dark:bg-white dark:text-neutral-900 dark:shadow-none dark:hover:bg-neutral-200"
           >
             Try it live
           </a>
@@ -86,7 +83,7 @@ export default function Hero() {
             href="https://github.com/levithefirst/provah"
             target="_blank"
             rel="noreferrer"
-            className="rounded-full border border-neutral-300 bg-white px-7 py-3.5 text-sm font-semibold text-neutral-800 transition-colors hover:border-neutral-400 dark:border-neutral-700 dark:bg-transparent dark:text-neutral-200 dark:hover:border-neutral-500"
+            className="rounded-full border border-neutral-300 bg-white px-7 py-3.5 text-sm font-semibold text-neutral-800 transition-all duration-150 hover:-translate-y-0.5 hover:border-neutral-400 active:translate-y-0 active:scale-[0.97] dark:border-neutral-700 dark:bg-transparent dark:text-neutral-200 dark:hover:border-neutral-500"
           >
             View the code
           </a>

@@ -3,6 +3,22 @@
 import { useEffect, useState } from "react";
 import { connect, disconnect } from "@starknet-io/get-starknet";
 import { RpcProvider, hash, num } from "starknet";
+import {
+  AlertTriangle,
+  CheckCircle2,
+  Coins,
+  Copy,
+  ExternalLink,
+  Loader2,
+  Lock,
+  Search,
+  Send,
+  ShieldCheck,
+  Sparkles,
+  Ticket,
+  Unlock,
+  Wallet,
+} from "lucide-react";
 
 type Campaign = {
   id: string;
@@ -237,6 +253,41 @@ async function connectWallet(): Promise<string | null> {
  * explicit "no on-chain link" callout. Stage highlighting tracks the
  * primary guided flow below it.
  */
+function FlowNode({
+  Icon,
+  label,
+  sub,
+  active,
+  done,
+}: {
+  Icon: typeof Lock;
+  label: string;
+  sub: string;
+  active: boolean;
+  done: boolean;
+}) {
+  return (
+    <div
+      className={`relative flex min-w-[9rem] flex-col items-center justify-center gap-1 rounded-xl border px-4 py-4 transition-all duration-300 ${
+        done
+          ? "border-emerald-300 bg-emerald-50 text-emerald-700 dark:border-emerald-500/60 dark:bg-emerald-500/10 dark:text-emerald-300"
+          : active
+            ? "border-neutral-900 bg-neutral-900/5 text-neutral-900 ring-2 ring-neutral-900/20 animate-soft-ring dark:border-neutral-100 dark:bg-neutral-100/10 dark:text-neutral-100 dark:ring-neutral-100/40"
+            : "border-neutral-200 text-neutral-400 dark:border-neutral-800 dark:text-neutral-500"
+      }`}
+    >
+      {done && (
+        <span className="absolute -right-1.5 -top-1.5 flex h-5 w-5 animate-pop-in items-center justify-center rounded-full bg-emerald-500 text-white shadow-sm dark:bg-emerald-400">
+          <CheckCircle2 className="h-3.5 w-3.5" strokeWidth={2.25} />
+        </span>
+      )}
+      <Icon className="h-6 w-6" strokeWidth={1.75} />
+      <span className="text-xs uppercase tracking-wide opacity-70">{label}</span>
+      <span className="text-sm font-medium">{sub}</span>
+    </div>
+  );
+}
+
 function CapabilityFlow({
   stage,
 }: {
@@ -245,47 +296,44 @@ function CapabilityFlow({
   const order = ["wallet-a", "pass", "wallet-b", "claimed"];
   const reached = (s: string) => order.indexOf(s) <= order.indexOf(stage === "idle" ? "" : stage);
 
-  const nodeClass = (active: boolean, done: boolean) =>
-    `relative flex flex-col items-center justify-center gap-1 rounded-xl border px-4 py-4 min-w-[9rem] transition-colors ${
-      done
-        ? "border-emerald-300 bg-emerald-50 text-emerald-700 dark:border-emerald-500/60 dark:bg-emerald-500/10 dark:text-emerald-300"
-        : active
-          ? "border-neutral-900 bg-neutral-900/5 text-neutral-900 ring-2 ring-neutral-900/20 animate-pulse dark:border-neutral-100 dark:bg-neutral-100/10 dark:text-neutral-100 dark:ring-neutral-100/40"
-          : "border-neutral-200 text-neutral-400 dark:border-neutral-800 dark:text-neutral-500"
-    }`;
-
   const arrowClass = (done: boolean) =>
-    `h-px flex-1 min-w-[1.5rem] sm:min-w-[2.5rem] ${
+    `h-px flex-1 min-w-[1.5rem] transition-colors duration-300 sm:min-w-[2.5rem] ${
       done ? "bg-emerald-500/60" : "bg-neutral-200 dark:bg-neutral-800"
     }`;
 
   return (
     <div className="rounded-xl border border-neutral-200 bg-neutral-50 p-5 dark:border-neutral-800 dark:bg-neutral-950/50">
       <p className="text-center text-base font-medium mb-4 text-neutral-900 dark:text-neutral-100">
-        🔒 Private balance{" "}
-        <span className="text-neutral-500 dark:text-neutral-500">turns into</span> 🎫 a bearer
+        Private balance{" "}
+        <span className="text-neutral-500 dark:text-neutral-500">turns into</span> a bearer
         capability{" "}
-        <span className="text-neutral-500 dark:text-neutral-500">, redeemed by</span> 🔓 any
-        wallet, unlinked.
+        <span className="text-neutral-500 dark:text-neutral-500">, redeemed by</span> any wallet,
+        unlinked.
       </p>
       <div className="flex items-center justify-center gap-1 sm:gap-3 overflow-x-auto">
-        <div className={nodeClass(stage === "wallet-a", reached("wallet-a"))}>
-          <span className="text-2xl leading-none">🔒</span>
-          <span className="text-xs uppercase tracking-wide opacity-70">Wallet A</span>
-          <span className="text-sm font-medium">private holder</span>
-        </div>
+        <FlowNode
+          Icon={Lock}
+          label="Wallet A"
+          sub="private holder"
+          active={stage === "wallet-a"}
+          done={reached("wallet-a")}
+        />
         <div className={arrowClass(reached("pass"))} />
-        <div className={nodeClass(stage === "pass", reached("pass"))}>
-          <span className="text-2xl leading-none">🎫</span>
-          <span className="text-xs uppercase tracking-wide opacity-70">Provah Pass</span>
-          <span className="text-sm font-medium">bearer capability</span>
-        </div>
+        <FlowNode
+          Icon={Ticket}
+          label="Provah Pass"
+          sub="bearer capability"
+          active={stage === "pass"}
+          done={reached("pass")}
+        />
         <div className={arrowClass(reached("wallet-b"))} />
-        <div className={nodeClass(stage === "wallet-b" || stage === "claimed", reached("wallet-b"))}>
-          <span className="text-2xl leading-none">🔓</span>
-          <span className="text-xs uppercase tracking-wide opacity-70">Wallet B</span>
-          <span className="text-sm font-medium">fresh, zero gas</span>
-        </div>
+        <FlowNode
+          Icon={Unlock}
+          label="Wallet B"
+          sub="fresh, zero gas"
+          active={stage === "wallet-b" || stage === "claimed"}
+          done={reached("wallet-b")}
+        />
       </div>
       <p className="mt-4 text-center text-xs text-neutral-500 dark:text-neutral-500">
         No on-chain link, no shared address, no Provah-stored mapping between A and B. The pass
@@ -304,7 +352,8 @@ export default function ProvaApp() {
   const [claimWallet, setClaimWallet] = useState<string>("");
   const [status, setStatus] = useState<string>("");
   const [claimTx, setClaimTx] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
+  const [busyAction, setBusyAction] = useState<"idle" | "generate" | "claim" | "redeem">("idle");
+  const busy = busyAction !== "idle";
   const [redeemToken, setRedeemToken] = useState("");
   const [redeemWallet, setRedeemWallet] = useState<string>("");
   const [redeemTx, setRedeemTx] = useState<string | null>(null);
@@ -423,7 +472,7 @@ export default function ProvaApp() {
       setStatus("Enter the wallet address to lock this pass to, or turn off locking.");
       return;
     }
-    setBusy(true);
+    setBusyAction("generate");
     setStatus("Evaluating predicate against your public deposit history…");
     try {
       const res = await fetch("/api/pass", {
@@ -460,7 +509,7 @@ export default function ProvaApp() {
     } catch {
       setStatus("Failed to reach Provah.");
     } finally {
-      setBusy(false);
+      setBusyAction("idle");
     }
   }
 
@@ -475,7 +524,7 @@ export default function ProvaApp() {
 
   async function handleClaim() {
     if (!campaign || !pass || !claimWallet) return;
-    setBusy(true);
+    setBusyAction("claim");
     setClaimVerify("idle");
     setClaimBalanceDelta(null);
     const hasReward = !!rewardLabel(campaign);
@@ -508,7 +557,7 @@ export default function ProvaApp() {
     } catch {
       setStatus("Failed to reach Provah.");
     } finally {
-      setBusy(false);
+      setBusyAction("idle");
     }
   }
 
@@ -538,7 +587,7 @@ export default function ProvaApp() {
       setRedeemStatus("Paste a valid pass token and connect a wallet first.");
       return;
     }
-    setBusy(true);
+    setBusyAction("redeem");
     setRedeemVerify("idle");
     setRedeemBalanceDelta(null);
     const redeemCampaign = campaigns.find((c) => c.id === decoded.campaignId);
@@ -572,7 +621,7 @@ export default function ProvaApp() {
     } catch {
       setRedeemStatus("Failed to reach Provah.");
     } finally {
-      setBusy(false);
+      setBusyAction("idle");
     }
   }
 
@@ -647,13 +696,14 @@ export default function ProvaApp() {
             <p>{campaign.description}</p>
             <p className="mt-1">Rule: {predicateLabel(campaign)}</p>
             {rewardLabel(campaign) && (
-              <p className="mt-2 rounded-md border border-emerald-300 bg-emerald-50 px-2 py-1.5 text-emerald-700 dark:border-emerald-800 dark:bg-emerald-500/10 dark:text-emerald-300">
-                💰 {rewardLabel(campaign)}
+              <p className="mt-2 flex items-start gap-1.5 rounded-md border border-emerald-300 bg-emerald-50 px-2 py-1.5 text-emerald-700 dark:border-emerald-800 dark:bg-emerald-500/10 dark:text-emerald-300">
+                <Coins className="mt-0.5 h-3.5 w-3.5 shrink-0" strokeWidth={1.75} /> {rewardLabel(campaign)}
               </p>
             )}
             {rewardLabel(campaign) && rewardPoolBalance !== null && (
-              <p className="mt-1 text-xs text-neutral-500 dark:text-neutral-500">
-                🔒 Reward pool currently holds {formatStrk(rewardPoolBalance)}, read live from{" "}
+              <p className="mt-1 flex items-start gap-1.5 text-xs text-neutral-500 dark:text-neutral-500">
+                <Lock className="mt-0.5 h-3 w-3 shrink-0" strokeWidth={1.75} /> Reward pool currently
+                holds {formatStrk(rewardPoolBalance)}, read live from{" "}
                 <a
                   className="underline hover:text-neutral-700 dark:hover:text-neutral-300"
                   href={`https://starkscan.co/contract/${PROVA_PASS_CONTRACT_ADDRESS}`}
@@ -692,15 +742,15 @@ export default function ProvaApp() {
           <button
             onClick={handleConnectProver}
             disabled={busy}
-            className="rounded-md bg-neutral-900 px-4 py-2.5 font-medium text-white transition-all hover:-translate-y-0.5 hover:bg-neutral-800 active:translate-y-0 disabled:pointer-events-none disabled:opacity-50 dark:bg-neutral-100 dark:text-neutral-900 dark:hover:bg-white"
+            className="inline-flex items-center gap-2 rounded-md bg-neutral-900 px-4 py-2.5 font-medium text-white transition-all duration-150 hover:-translate-y-0.5 hover:bg-neutral-800 active:translate-y-0 active:scale-[0.97] disabled:pointer-events-none disabled:opacity-50 dark:bg-neutral-100 dark:text-neutral-900 dark:hover:bg-white"
           >
-            Connect wallet A
+            <Wallet className="h-4 w-4" strokeWidth={1.75} /> Connect wallet A
           </button>
           <span className="font-mono text-sm text-neutral-500 dark:text-neutral-400">{short(proverWallet)}</span>
         </div>
         {proverWallet && selfCheck !== "idle" && (
           <p
-            className={`rounded-md border px-2 py-1.5 text-xs ${
+            className={`animate-rise-in flex items-start gap-1.5 rounded-md border px-2 py-1.5 text-xs ${
               selfCheck === "eligible"
                 ? "border-emerald-300 bg-emerald-50 text-emerald-700 dark:border-emerald-800 dark:bg-emerald-500/10 dark:text-emerald-300"
                 : selfCheck === "ineligible"
@@ -710,11 +760,21 @@ export default function ProvaApp() {
                     : "border-neutral-200 bg-neutral-50 text-neutral-500 dark:border-neutral-800 dark:bg-neutral-900 dark:text-neutral-500"
             }`}
           >
-            🔍 Self-check (runs in your browser, against public RPC, independent of Provah):{" "}
-            {selfCheck === "checking" && "reading your public deposit history…"}
-            {selfCheck === "eligible" && `✅ You qualify. ${selfCheckDetail}`}
-            {selfCheck === "ineligible" && `Not yet eligible. ${selfCheckDetail}`}
-            {selfCheck === "error" && selfCheckDetail}
+            {selfCheck === "checking" ? (
+              <Loader2 className="mt-0.5 h-3.5 w-3.5 shrink-0 animate-spin" strokeWidth={1.75} />
+            ) : selfCheck === "eligible" ? (
+              <CheckCircle2 className="mt-0.5 h-3.5 w-3.5 shrink-0" strokeWidth={1.75} />
+            ) : (
+              <Search className="mt-0.5 h-3.5 w-3.5 shrink-0" strokeWidth={1.75} />
+            )}
+            <span>
+              <span className="font-medium">Self-check</span> (runs in your browser, against public
+              RPC, independent of Provah):{" "}
+              {selfCheck === "checking" && "reading your public deposit history…"}
+              {selfCheck === "eligible" && `You qualify. ${selfCheckDetail}`}
+              {selfCheck === "ineligible" && `Not yet eligible. ${selfCheckDetail}`}
+              {selfCheck === "error" && selfCheckDetail}
+            </span>
           </p>
         )}
         <label className="flex items-center gap-2 text-sm text-neutral-700 dark:text-neutral-300">
@@ -738,30 +798,37 @@ export default function ProvaApp() {
         <button
           onClick={handleGeneratePass}
           disabled={busy || !proverWallet || !campaign}
-          className="self-start rounded-md border border-neutral-400 px-4 py-2.5 text-neutral-900 transition-all hover:-translate-y-0.5 hover:border-neutral-600 active:translate-y-0 disabled:pointer-events-none disabled:opacity-40 dark:border-neutral-600 dark:text-neutral-100 dark:hover:border-neutral-400"
+          className="inline-flex items-center gap-2 self-start rounded-md border border-neutral-400 px-4 py-2.5 text-neutral-900 transition-all duration-150 hover:-translate-y-0.5 hover:border-neutral-600 active:translate-y-0 active:scale-[0.97] disabled:pointer-events-none disabled:opacity-40 dark:border-neutral-600 dark:text-neutral-100 dark:hover:border-neutral-400"
         >
-          Generate pass
+          {busyAction === "generate" ? (
+            <Loader2 className="h-4 w-4 animate-spin" strokeWidth={1.75} />
+          ) : (
+            <Sparkles className="h-4 w-4" strokeWidth={1.75} />
+          )}
+          {busyAction === "generate" ? "Generating…" : "Generate pass"}
         </button>
         {pass && (
-          <div className="flex flex-col gap-2">
+          <div className="animate-rise-in flex flex-col gap-2">
             <p className="font-mono text-xs text-emerald-600 break-all dark:text-emerald-400">
               nullifier: {pass.nullifier}
             </p>
             {campaign && rewardLabel(campaign) && (
-              <p className="rounded-md border border-emerald-300 bg-emerald-50 px-2 py-1.5 text-xs text-emerald-700 dark:border-emerald-800 dark:bg-emerald-500/10 dark:text-emerald-300">
-                💰 {rewardLabel(campaign)}
+              <p className="flex items-start gap-1.5 rounded-md border border-emerald-300 bg-emerald-50 px-2 py-1.5 text-xs text-emerald-700 dark:border-emerald-800 dark:bg-emerald-500/10 dark:text-emerald-300">
+                <Coins className="mt-0.5 h-3.5 w-3.5 shrink-0" strokeWidth={1.75} /> {rewardLabel(campaign)}
               </p>
             )}
             {pass.boundRecipient ? (
-              <p className="rounded-md border border-indigo-300 bg-indigo-50 px-2 py-1.5 text-xs text-indigo-800 dark:border-indigo-800 dark:bg-indigo-500/10 dark:text-indigo-300">
-                🔒 Locked to {short(pass.boundRecipient)}. Only that wallet can claim it — Provah
-                refuses to attest a claim to any other recipient.
+              <p className="flex items-start gap-1.5 rounded-md border border-indigo-300 bg-indigo-50 px-2 py-1.5 text-xs text-indigo-800 dark:border-indigo-800 dark:bg-indigo-500/10 dark:text-indigo-300">
+                <Lock className="mt-0.5 h-3.5 w-3.5 shrink-0" strokeWidth={1.75} /> Locked to{" "}
+                {short(pass.boundRecipient)}. Only that wallet can claim it — Provah refuses to
+                attest a claim to any other recipient.
               </p>
             ) : (
-              <p className="rounded-md border border-amber-300 bg-amber-50 px-2 py-1.5 text-xs text-amber-800 dark:border-amber-800 dark:bg-amber-500/10 dark:text-amber-300">
-                ⚠️ This is a pure bearer token, by design. Anyone holding the raw text below can
-                redeem it to a destination wallet of <em>their</em> choosing. Treat it like cash:
-                keep it secret until you hand it off or redeem it yourself.
+              <p className="flex items-start gap-1.5 rounded-md border border-amber-300 bg-amber-50 px-2 py-1.5 text-xs text-amber-800 dark:border-amber-800 dark:bg-amber-500/10 dark:text-amber-300">
+                <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" strokeWidth={1.75} /> This is
+                a pure bearer token, by design. Anyone holding the raw text below can redeem it to a
+                destination wallet of <em>their</em> choosing. Treat it like cash: keep it secret
+                until you hand it off or redeem it yourself.
               </p>
             )}
             <PassTokenExport pass={pass} />
@@ -775,59 +842,77 @@ export default function ProvaApp() {
           <button
             onClick={handleConnectClaimWallet}
             disabled={busy || !pass}
-            className="rounded-md bg-neutral-900 px-4 py-2.5 font-medium text-white transition-all hover:-translate-y-0.5 hover:bg-neutral-800 active:translate-y-0 disabled:pointer-events-none disabled:opacity-50 dark:bg-neutral-100 dark:text-neutral-900 dark:hover:bg-white"
+            className="inline-flex items-center gap-2 rounded-md bg-neutral-900 px-4 py-2.5 font-medium text-white transition-all duration-150 hover:-translate-y-0.5 hover:bg-neutral-800 active:translate-y-0 active:scale-[0.97] disabled:pointer-events-none disabled:opacity-50 dark:bg-neutral-100 dark:text-neutral-900 dark:hover:bg-white"
           >
-            Connect wallet B
+            <Wallet className="h-4 w-4" strokeWidth={1.75} /> Connect wallet B
           </button>
           <span className="font-mono text-sm text-neutral-500 dark:text-neutral-400">{short(claimWallet)}</span>
         </div>
         {proverWallet && claimWallet && proverWallet === claimWallet && (
-          <p className="text-amber-700 text-sm dark:text-amber-400">
-            That&apos;s the same wallet. Connect a genuinely different one to demonstrate unlinkability.
+          <p className="flex items-start gap-1.5 text-sm text-amber-700 dark:text-amber-400">
+            <AlertTriangle className="mt-0.5 h-4 w-4 shrink-0" strokeWidth={1.75} /> That&apos;s the
+            same wallet. Connect a genuinely different one to demonstrate unlinkability.
           </p>
         )}
         <button
           onClick={handleClaim}
           disabled={busy || !pass || !claimWallet}
-          className="self-start rounded-md border border-neutral-400 px-4 py-2.5 text-neutral-900 transition-all hover:-translate-y-0.5 hover:border-neutral-600 active:translate-y-0 disabled:pointer-events-none disabled:opacity-40 dark:border-neutral-600 dark:text-neutral-100 dark:hover:border-neutral-400"
+          className="inline-flex items-center gap-2 self-start rounded-md border border-neutral-400 px-4 py-2.5 text-neutral-900 transition-all duration-150 hover:-translate-y-0.5 hover:border-neutral-600 active:translate-y-0 active:scale-[0.97] disabled:pointer-events-none disabled:opacity-40 dark:border-neutral-600 dark:text-neutral-100 dark:hover:border-neutral-400"
         >
-          Claim
+          {busyAction === "claim" ? (
+            <Loader2 className="h-4 w-4 animate-spin" strokeWidth={1.75} />
+          ) : (
+            <Send className="h-4 w-4" strokeWidth={1.75} />
+          )}
+          {busyAction === "claim" ? "Claiming…" : "Claim"}
         </button>
         {claimTx && (
-          <div className="flex flex-col gap-2">
-            <p className="rounded-md border border-emerald-300 bg-emerald-50 px-3 py-2 font-mono text-xs text-emerald-700 break-all dark:border-emerald-800 dark:bg-emerald-500/10 dark:text-emerald-300">
-              ✅ claim tx:{" "}
-              <a
-                className="underline hover:text-emerald-900 dark:hover:text-emerald-200"
-                href={`https://starkscan.co/tx/${claimTx}`}
-                target="_blank"
-                rel="noreferrer"
-              >
-                {claimTx}
-              </a>
+          <div className="animate-rise-in flex flex-col gap-2">
+            <p className="flex items-start gap-1.5 rounded-md border border-emerald-300 bg-emerald-50 px-3 py-2 font-mono text-xs text-emerald-700 break-all dark:border-emerald-800 dark:bg-emerald-500/10 dark:text-emerald-300">
+              <CheckCircle2 className="mt-0.5 h-3.5 w-3.5 shrink-0" strokeWidth={1.75} />
+              <span>
+                claim tx:{" "}
+                <a
+                  className="inline-flex items-center gap-0.5 underline hover:text-emerald-900 dark:hover:text-emerald-200"
+                  href={`https://starkscan.co/tx/${claimTx}`}
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  {claimTx}
+                  <ExternalLink className="h-3 w-3 shrink-0" strokeWidth={1.75} />
+                </a>
+              </span>
             </p>
             {claimBalanceDelta && (
-              <p className="rounded-md border border-emerald-300 bg-emerald-50 px-3 py-2 text-xs text-emerald-700 dark:border-emerald-800 dark:bg-emerald-500/10 dark:text-emerald-300">
-                💰 +{claimBalanceDelta} STRK confirmed in wallet B, verified from your own browser,
-                not just asserted by Provah.
+              <p className="flex items-start gap-1.5 rounded-md border border-emerald-300 bg-emerald-50 px-3 py-2 text-xs text-emerald-700 dark:border-emerald-800 dark:bg-emerald-500/10 dark:text-emerald-300">
+                <Coins className="mt-0.5 h-3.5 w-3.5 shrink-0" strokeWidth={1.75} /> +{claimBalanceDelta}{" "}
+                STRK confirmed in wallet B, verified from your own browser, not just asserted by
+                Provah.
               </p>
             )}
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               <button
                 onClick={handleVerifyClaim}
                 disabled={claimVerify === "checking"}
-                className="self-start rounded-md border border-neutral-400 px-3 py-1.5 text-xs font-medium text-neutral-900 transition-all hover:border-neutral-600 disabled:pointer-events-none disabled:opacity-50 dark:border-neutral-600 dark:text-neutral-100 dark:hover:border-neutral-400"
+                className="inline-flex items-center gap-1.5 self-start rounded-md border border-neutral-400 px-3 py-1.5 text-xs font-medium text-neutral-900 transition-all duration-150 hover:border-neutral-600 active:scale-[0.97] disabled:pointer-events-none disabled:opacity-50 dark:border-neutral-600 dark:text-neutral-100 dark:hover:border-neutral-400"
               >
+                {claimVerify === "checking" ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" strokeWidth={1.75} />
+                ) : (
+                  <ShieldCheck className="h-3.5 w-3.5" strokeWidth={1.75} />
+                )}
                 {claimVerify === "checking" ? "Checking chain…" : "Verify on-chain"}
               </button>
               {claimVerify === "confirmed" && (
-                <span className="text-xs text-emerald-700 dark:text-emerald-300">
-                  ✓ nullifier confirmed consumed on mainnet, read directly via public RPC
+                <span className="animate-rise-in flex items-center gap-1.5 text-xs text-emerald-700 dark:text-emerald-300">
+                  <CheckCircle2 className="h-3.5 w-3.5 shrink-0" strokeWidth={1.75} /> nullifier
+                  confirmed consumed on mainnet, read directly via public RPC
                 </span>
               )}
               {claimVerify === "failed" && (
-                <span className="text-xs text-amber-700 dark:text-amber-400">
-                  Could not confirm via public RPC — try again shortly.
+                <span className="animate-rise-in flex items-center gap-1.5 text-xs text-amber-700 dark:text-amber-400">
+                  <AlertTriangle className="h-3.5 w-3.5 shrink-0" strokeWidth={1.75} /> Could not
+                  confirm via public RPC — try again shortly.
                 </span>
               )}
             </div>
@@ -836,8 +921,9 @@ export default function ProvaApp() {
       </section>
 
       {status && (
-        <p className="rounded-2xl border border-neutral-200 bg-neutral-50 px-5 py-4 text-sm text-neutral-600 dark:border-neutral-800 dark:bg-neutral-900/40 dark:text-neutral-400">
-          {status}
+        <p className="animate-rise-in flex items-start gap-2 rounded-2xl border border-neutral-200 bg-neutral-50 px-5 py-4 text-sm text-neutral-600 dark:border-neutral-800 dark:bg-neutral-900/40 dark:text-neutral-400">
+          {busy && <Loader2 className="mt-0.5 h-4 w-4 shrink-0 animate-spin" strokeWidth={1.75} />}
+          <span>{status}</span>
         </p>
       )}
 
@@ -858,12 +944,12 @@ export default function ProvaApp() {
                 <span className="flex items-center gap-2">
                   {p.campaignName}
                   {p.boundRecipient ? (
-                    <span className="rounded-full border border-indigo-300 px-2 py-0.5 text-[10px] text-indigo-700 dark:border-indigo-800 dark:text-indigo-300">
-                      🔒 locked
+                    <span className="inline-flex items-center gap-1 rounded-full border border-indigo-300 px-2 py-0.5 text-[10px] text-indigo-700 dark:border-indigo-800 dark:text-indigo-300">
+                      <Lock className="h-2.5 w-2.5" strokeWidth={2} /> locked
                     </span>
                   ) : (
-                    <span className="rounded-full border border-amber-300 px-2 py-0.5 text-[10px] text-amber-700 dark:border-amber-800 dark:text-amber-300">
-                      bearer
+                    <span className="inline-flex items-center gap-1 rounded-full border border-amber-300 px-2 py-0.5 text-[10px] text-amber-700 dark:border-amber-800 dark:text-amber-300">
+                      <Ticket className="h-2.5 w-2.5" strokeWidth={2} /> bearer
                     </span>
                   )}
                 </span>
@@ -891,54 +977,71 @@ export default function ProvaApp() {
           <button
             onClick={handleConnectRedeemWallet}
             disabled={busy}
-            className="rounded-md bg-neutral-900 px-4 py-2.5 font-medium text-white transition-all hover:-translate-y-0.5 hover:bg-neutral-800 active:translate-y-0 disabled:pointer-events-none disabled:opacity-50 dark:bg-neutral-100 dark:text-neutral-900 dark:hover:bg-white"
+            className="inline-flex items-center gap-2 rounded-md bg-neutral-900 px-4 py-2.5 font-medium text-white transition-all duration-150 hover:-translate-y-0.5 hover:bg-neutral-800 active:translate-y-0 active:scale-[0.97] disabled:pointer-events-none disabled:opacity-50 dark:bg-neutral-100 dark:text-neutral-900 dark:hover:bg-white"
           >
-            Connect wallet
+            <Wallet className="h-4 w-4" strokeWidth={1.75} /> Connect wallet
           </button>
           <span className="font-mono text-sm text-neutral-500 dark:text-neutral-400">{short(redeemWallet)}</span>
         </div>
         <button
           onClick={handleRedeem}
           disabled={busy || !redeemToken || !redeemWallet}
-          className="self-start rounded-md border border-neutral-400 px-4 py-2.5 text-neutral-900 transition-all hover:-translate-y-0.5 hover:border-neutral-600 active:translate-y-0 disabled:pointer-events-none disabled:opacity-40 dark:border-neutral-600 dark:text-neutral-100 dark:hover:border-neutral-400"
+          className="inline-flex items-center gap-2 self-start rounded-md border border-neutral-400 px-4 py-2.5 text-neutral-900 transition-all duration-150 hover:-translate-y-0.5 hover:border-neutral-600 active:translate-y-0 active:scale-[0.97] disabled:pointer-events-none disabled:opacity-40 dark:border-neutral-600 dark:text-neutral-100 dark:hover:border-neutral-400"
         >
-          Redeem
+          {busyAction === "redeem" ? (
+            <Loader2 className="h-4 w-4 animate-spin" strokeWidth={1.75} />
+          ) : (
+            <Send className="h-4 w-4" strokeWidth={1.75} />
+          )}
+          {busyAction === "redeem" ? "Redeeming…" : "Redeem"}
         </button>
-        {redeemStatus && <p className="text-sm text-neutral-600 dark:text-neutral-400">{redeemStatus}</p>}
+        {redeemStatus && <p className="animate-rise-in text-sm text-neutral-600 dark:text-neutral-400">{redeemStatus}</p>}
         {redeemTx && (
-          <div className="flex flex-col gap-2">
-            <p className="rounded-md border border-emerald-300 bg-emerald-50 px-3 py-2 font-mono text-xs text-emerald-700 break-all dark:border-emerald-800 dark:bg-emerald-500/10 dark:text-emerald-300">
-              ✅ claim tx:{" "}
-              <a
-                className="underline hover:text-emerald-900 dark:hover:text-emerald-200"
-                href={`https://starkscan.co/tx/${redeemTx}`}
-                target="_blank"
-                rel="noreferrer"
-              >
-                {redeemTx}
-              </a>
+          <div className="animate-rise-in flex flex-col gap-2">
+            <p className="flex items-start gap-1.5 rounded-md border border-emerald-300 bg-emerald-50 px-3 py-2 font-mono text-xs text-emerald-700 break-all dark:border-emerald-800 dark:bg-emerald-500/10 dark:text-emerald-300">
+              <CheckCircle2 className="mt-0.5 h-3.5 w-3.5 shrink-0" strokeWidth={1.75} />
+              <span>
+                claim tx:{" "}
+                <a
+                  className="inline-flex items-center gap-0.5 underline hover:text-emerald-900 dark:hover:text-emerald-200"
+                  href={`https://starkscan.co/tx/${redeemTx}`}
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  {redeemTx}
+                  <ExternalLink className="h-3 w-3 shrink-0" strokeWidth={1.75} />
+                </a>
+              </span>
             </p>
             {redeemBalanceDelta && (
-              <p className="rounded-md border border-emerald-300 bg-emerald-50 px-3 py-2 text-xs text-emerald-700 dark:border-emerald-800 dark:bg-emerald-500/10 dark:text-emerald-300">
-                💰 +{redeemBalanceDelta} STRK confirmed in your wallet, verified from your own
-                browser, not just asserted by Provah.
+              <p className="flex items-start gap-1.5 rounded-md border border-emerald-300 bg-emerald-50 px-3 py-2 text-xs text-emerald-700 dark:border-emerald-800 dark:bg-emerald-500/10 dark:text-emerald-300">
+                <Coins className="mt-0.5 h-3.5 w-3.5 shrink-0" strokeWidth={1.75} /> +{redeemBalanceDelta}{" "}
+                STRK confirmed in your wallet, verified from your own browser, not just asserted by
+                Provah.
               </p>
             )}
-            <div className="flex items-center gap-2">
+            <div className="flex flex-wrap items-center gap-2">
               <button
                 onClick={handleVerifyRedeem}
                 disabled={redeemVerify === "checking"}
-                className="self-start rounded-md border border-neutral-400 px-3 py-1.5 text-xs font-medium text-neutral-900 transition-all hover:border-neutral-600 disabled:pointer-events-none disabled:opacity-50 dark:border-neutral-600 dark:text-neutral-100 dark:hover:border-neutral-400"
+                className="inline-flex items-center gap-1.5 self-start rounded-md border border-neutral-400 px-3 py-1.5 text-xs font-medium text-neutral-900 transition-all duration-150 hover:border-neutral-600 active:scale-[0.97] disabled:pointer-events-none disabled:opacity-50 dark:border-neutral-600 dark:text-neutral-100 dark:hover:border-neutral-400"
               >
+                {redeemVerify === "checking" ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" strokeWidth={1.75} />
+                ) : (
+                  <ShieldCheck className="h-3.5 w-3.5" strokeWidth={1.75} />
+                )}
                 {redeemVerify === "checking" ? "Checking chain…" : "Verify on-chain"}
               </button>
               {redeemVerify === "confirmed" && (
-                <span className="text-xs text-emerald-700 dark:text-emerald-300">
-                  ✓ nullifier confirmed consumed on mainnet, read directly via public RPC
+                <span className="animate-rise-in flex items-center gap-1.5 text-xs text-emerald-700 dark:text-emerald-300">
+                  <CheckCircle2 className="h-3.5 w-3.5 shrink-0" strokeWidth={1.75} /> nullifier
+                  confirmed consumed on mainnet, read directly via public RPC
                 </span>
               )}
               {redeemVerify === "failed" && (
-                <span className="text-xs text-amber-700 dark:text-amber-400">
+                <span className="animate-rise-in flex items-center gap-1.5 text-xs text-amber-700 dark:text-amber-400">
+                  <AlertTriangle className="h-3.5 w-3.5 shrink-0" strokeWidth={1.75} />
                   Could not confirm via public RPC — try again shortly.
                 </span>
               )}
@@ -980,13 +1083,18 @@ function PassTokenExport({ pass }: { pass: LocalPass }) {
         />
         <button
           onClick={copy}
-          className={`shrink-0 rounded-md border px-3 py-1.5 text-xs font-medium transition-all active:scale-95 ${
+          className={`inline-flex shrink-0 items-center gap-1.5 rounded-md border px-3 py-1.5 text-xs font-medium transition-all duration-150 active:scale-[0.95] ${
             copied
               ? "border-emerald-300 bg-emerald-50 text-emerald-700 dark:border-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-300"
               : "border-neutral-400 text-neutral-900 hover:border-neutral-600 dark:border-neutral-600 dark:text-neutral-100 dark:hover:border-neutral-400"
           }`}
         >
-          {copied ? "✓ Copied" : "Copy"}
+          {copied ? (
+            <CheckCircle2 key="copied" className="h-3.5 w-3.5 animate-pop-in" strokeWidth={1.75} />
+          ) : (
+            <Copy className="h-3.5 w-3.5" strokeWidth={1.75} />
+          )}
+          {copied ? "Copied" : "Copy"}
         </button>
       </div>
     </div>

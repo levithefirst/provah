@@ -47,3 +47,75 @@ body {
   transition-duration: 200ms;
   transition-timing-function: ease;
 }
+
+/* Subtle, purposeful motion only — no flashing, no bouncing. */
+
+@keyframes soft-ring {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgba(79, 70, 229, 0.22);
+  }
+  50% {
+    box-shadow: 0 0 0 5px rgba(79, 70, 229, 0);
+  }
+}
+
+.dark .animate-soft-ring {
+  animation: soft-ring-dark 2.6s ease-in-out infinite;
+}
+
+@keyframes soft-ring-dark {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgba(199, 210, 254, 0.28);
+  }
+  50% {
+    box-shadow: 0 0 0 5px rgba(199, 210, 254, 0);
+  }
+}
+
+.animate-soft-ring {
+  animation: soft-ring 2.6s ease-in-out infinite;
+}
+
+@keyframes pop-in {
+  0% {
+    opacity: 0;
+    transform: scale(0.7);
+  }
+  60% {
+    opacity: 1;
+    transform: scale(1.06);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.animate-pop-in {
+  animation: pop-in 260ms cubic-bezier(0.34, 1.56, 0.64, 1) both;
+}
+
+@keyframes rise-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-rise-in {
+  animation: rise-in 260ms ease-out both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-soft-ring,
+  .animate-pop-in,
+  .animate-rise-in {
+    animation: none !important;
+  }
+}

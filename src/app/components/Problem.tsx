@@ -1,3 +1,5 @@
+import { Check, Lock, Ticket, X } from "lucide-react";
+
 export default function Problem() {
   return (
     <section className="bg-neutral-50 py-24 dark:bg-neutral-900/40">
@@ -24,20 +26,20 @@ export default function Problem() {
 
         <div className="rounded-3xl border border-neutral-200 bg-white p-8 shadow-sm dark:border-neutral-800 dark:bg-neutral-900">
           <div className="flex items-center gap-3 text-neutral-400 dark:text-neutral-600">
-            <span className="text-2xl">🔒</span>
+            <Lock className="h-6 w-6" strokeWidth={1.75} />
             <div className="h-px flex-1 bg-neutral-200 dark:bg-neutral-800" />
-            <span className="text-2xl">❌</span>
+            <X className="h-6 w-6" strokeWidth={1.75} />
           </div>
           <p className="mt-4 text-sm font-medium text-neutral-500 dark:text-neutral-500">
             Without Provah: acting on private state means revealing the wallet, or building a
             one-off proof system per app.
           </p>
           <div className="mt-8 flex items-center gap-3 text-indigo-500 dark:text-indigo-400">
-            <span className="text-2xl">🔒</span>
+            <Lock className="h-6 w-6" strokeWidth={1.75} />
             <div className="h-px flex-1 bg-indigo-200 dark:bg-indigo-500/30" />
-            <span className="text-2xl">🎫</span>
+            <Ticket className="h-6 w-6" strokeWidth={1.75} />
             <div className="h-px flex-1 bg-indigo-200 dark:bg-indigo-500/30" />
-            <span className="text-2xl">✅</span>
+            <Check className="h-6 w-6" strokeWidth={1.75} />
           </div>
           <p className="mt-4 text-sm font-medium text-neutral-700 dark:text-neutral-300">
             With Provah: the fact becomes a portable capability. Any wallet can redeem it, with
