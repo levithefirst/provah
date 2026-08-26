@@ -148,9 +148,10 @@ const POOL_ADDRESS = "0x040337b1af3c663e86e333bab5a4b28da8d4652a15a69beee2b67777
  * The pubkey derivation follows the doc's own snippet: sign a fixed
  * domain message, Poseidon-fold the signature, reduce into curve order.
  * The resulting scalar's own EC public key is registered. The optional
- * encrypted-backup field (enc_private_key) has no specified encoding in
- * the docs; we submit an explicit "no backup provided" zero value rather
- * than fabricate a bogus encryption scheme.
+ * encrypted-backup field (enc_private_key: EncPrivateKey{auditor_public_key,
+ * ephemeral_pubkey, enc_private_key}) has no specified encoding in the
+ * docs; we submit explicit "no backup provided" zero values rather than
+ * fabricate a bogus encryption scheme.
  */
 async function cmdPoolRegisterViewingKey({ dryRun }) {
   const p = provider();
@@ -183,7 +184,12 @@ async function cmdPoolRegisterViewingKey({ dryRun }) {
     EMIT_VIEWING_KEY_SET_VARIANT.toString(),
     ACCOUNT_ADDRESS, // ViewingKeySet.user_addr
     publicKey, // ViewingKeySet.public_key
-    "0x0", // ViewingKeySet.enc_private_key — no backup provided
+    // ViewingKeySet.enc_private_key is a 3-felt EncPrivateKey struct
+    // {auditor_public_key, ephemeral_pubkey, enc_private_key} — no backup
+    // provided, so all zero.
+    "0x0",
+    "0x0",
+    "0x0",
     "0x1", // screening: Option<ScreeningAttestation>::None
   ];
   const call = { contractAddress: POOL_ADDRESS, entrypoint: "apply_actions", calldata };
