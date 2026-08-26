@@ -7,6 +7,7 @@ type Campaign = {
   id: string;
   name: string;
   description: string;
+  predicate_type: string;
   predicate_asset: string;
   predicate_min_amount: string;
   predicate_min_days: number;
@@ -15,11 +16,91 @@ type Campaign = {
   expiry: number;
   status: string;
   create_tx_hash: string | null;
+  claim_kind: string;
 };
+
+type LocalPass = {
+  campaignId: string;
+  campaignName: string;
+  nullifier: string;
+  createdAt: number;
+};
+
+const LOCAL_PASSES_KEY = "prova_local_passes_v1";
 
 function short(addr: string | null | undefined) {
   if (!addr) return "—";
   return addr.slice(0, 6) + "…" + addr.slice(-4);
+}
+
+function predicateLabel(c: Campaign): string {
+  switch (c.predicate_type) {
+    case "balance_threshold":
+      return `Balance ≥ ${c.predicate_min_amount} of ${short(c.predicate_asset)} (any time)`;
+    case "deposit_count":
+      return `≥ ${c.predicate_min_amount} deposits of ${short(c.predicate_asset)} into the pool`;
+    case "held_since":
+    default:
+      return `Held ≥ ${c.predicate_min_amount} of ${short(c.predicate_asset)} for ≥ ${c.predicate_min_days} days`;
+  }
+}
+
+function predicateTypeTag(type: string): string {
+  switch (type) {
+    case "balance_threshold":
+      return "Balance threshold";
+    case "deposit_count":
+      return "Deposit activity";
+    case "held_since":
+    default:
+      return "Held since";
+  }
+}
+
+function claimKindTag(kind: string): string {
+  switch (kind) {
+    case "allowlist":
+      return "Allowlist entry";
+    case "reward_token":
+      return "Reward token";
+    case "capability":
+    default:
+      return "Capability only";
+  }
+}
+
+function encodePassToken(campaignId: string, nullifier: string): string {
+  const json = JSON.stringify({ v: 1, campaignId, nullifier });
+  return typeof window === "undefined" ? "" : window.btoa(json);
+}
+
+function decodePassToken(token: string): { campaignId: string; nullifier: string } | null {
+  try {
+    const parsed = JSON.parse(window.atob(token.trim()));
+    if (parsed?.campaignId && parsed?.nullifier) {
+      return { campaignId: parsed.campaignId, nullifier: parsed.nullifier };
+    }
+    return null;
+  } catch {
+    return null;
+  }
+}
+
+function loadLocalPasses(): LocalPass[] {
+  if (typeof window === "undefined") return [];
+  try {
+    return JSON.parse(window.localStorage.getItem(LOCAL_PASSES_KEY) ?? "[]");
+  } catch {
+    return [];
+  }
+}
+
+function saveLocalPasses(passes: LocalPass[]) {
+  try {
+    window.localStorage.setItem(LOCAL_PASSES_KEY, JSON.stringify(passes));
+  } catch {
+    // localStorage unavailable — passes just won't persist across reloads
+  }
 }
 
 async function connectWallet(): Promise<string | null> {
@@ -29,17 +110,74 @@ async function connectWallet(): Promise<string | null> {
   return Array.isArray(accounts) && accounts.length > 0 ? accounts[0] : null;
 }
 
+/**
+ * The hero visual: Wallet A (private) -> Pass -> Wallet B (fresh), with an
+ * explicit "no on-chain link" callout. Stage highlighting tracks the
+ * primary guided flow below it.
+ */
+function CapabilityFlow({
+  stage,
+}: {
+  stage: "idle" | "wallet-a" | "pass" | "wallet-b" | "claimed";
+}) {
+  const order = ["wallet-a", "pass", "wallet-b", "claimed"];
+  const reached = (s: string) => order.indexOf(s) <= order.indexOf(stage === "idle" ? "" : stage);
+
+  const nodeClass = (active: boolean, done: boolean) =>
+    `flex flex-col items-center justify-center gap-1 rounded-xl border px-4 py-3 min-w-[8rem] transition-colors ${
+      done
+        ? "border-emerald-500/60 bg-emerald-500/10 text-emerald-300"
+        : active
+          ? "border-neutral-100 bg-neutral-100/10 text-neutral-100"
+          : "border-neutral-800 text-neutral-500"
+    }`;
+
+  const arrowClass = (done: boolean) =>
+    `h-px flex-1 min-w-[2rem] ${done ? "bg-emerald-500/60" : "bg-neutral-800"}`;
+
+  return (
+    <div className="rounded-xl border border-neutral-800 bg-neutral-950/50 p-5">
+      <div className="flex items-center justify-center gap-2 sm:gap-4 overflow-x-auto">
+        <div className={nodeClass(stage === "wallet-a", reached("wallet-a"))}>
+          <span className="text-xs uppercase tracking-wide opacity-70">Wallet A</span>
+          <span className="text-sm font-medium">private holder</span>
+        </div>
+        <div className={arrowClass(reached("pass"))} />
+        <div className={nodeClass(stage === "pass", reached("pass"))}>
+          <span className="text-xs uppercase tracking-wide opacity-70">Prova Pass</span>
+          <span className="text-sm font-medium">bearer capability</span>
+        </div>
+        <div className={arrowClass(reached("wallet-b"))} />
+        <div className={nodeClass(stage === "wallet-b" || stage === "claimed", reached("wallet-b"))}>
+          <span className="text-xs uppercase tracking-wide opacity-70">Wallet B</span>
+          <span className="text-sm font-medium">fresh, zero gas</span>
+        </div>
+      </div>
+      <p className="mt-4 text-center text-xs text-neutral-500">
+        No on-chain link, no shared address, no Prova-stored mapping between A and B — the pass
+        itself is the only thing that crosses between them.
+      </p>
+    </div>
+  );
+}
+
 export default function ProvaApp() {
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
   const [selected, setSelected] = useState<string>("");
   const [proverWallet, setProverWallet] = useState<string | null>(null);
+  const [pass, setPass] = useState<LocalPass | null>(null);
+  const [localPasses, setLocalPasses] = useState<LocalPass[]>([]);
   const [claimWallet, setClaimWallet] = useState<string>("");
-  const [pass, setPass] = useState<{ nullifier: string } | null>(null);
   const [status, setStatus] = useState<string>("");
   const [claimTx, setClaimTx] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  const [redeemToken, setRedeemToken] = useState("");
+  const [redeemWallet, setRedeemWallet] = useState<string>("");
+  const [redeemTx, setRedeemTx] = useState<string | null>(null);
+  const [redeemStatus, setRedeemStatus] = useState<string>("");
 
   useEffect(() => {
+    setLocalPasses(loadLocalPasses());
     fetch("/api/campaigns")
       .then((r) => r.json())
       .then((d) => {
@@ -51,6 +189,22 @@ export default function ProvaApp() {
   }, []);
 
   const campaign = campaigns.find((c) => c.id === selected);
+
+  const flowStage: "idle" | "wallet-a" | "pass" | "wallet-b" | "claimed" = claimTx
+    ? "claimed"
+    : claimWallet
+      ? "wallet-b"
+      : pass
+        ? "pass"
+        : proverWallet
+          ? "wallet-a"
+          : "idle";
+
+  function addLocalPass(next: LocalPass) {
+    const updated = [next, ...localPasses];
+    setLocalPasses(updated);
+    saveLocalPasses(updated);
+  }
 
   async function handleConnectProver() {
     try {
@@ -78,7 +232,14 @@ export default function ProvaApp() {
         setStatus(`Not eligible yet: ${data.error}`);
         setPass(null);
       } else {
-        setPass({ nullifier: data.nullifier });
+        const newPass: LocalPass = {
+          campaignId: campaign.id,
+          campaignName: campaign.name,
+          nullifier: data.nullifier,
+          createdAt: Date.now(),
+        };
+        setPass(newPass);
+        addLocalPass(newPass);
         setStatus("Prova Pass issued. Disconnect, then connect a completely different wallet to claim.");
         await disconnect();
         setProverWallet(null);
@@ -123,14 +284,58 @@ export default function ProvaApp() {
     }
   }
 
+  async function handleConnectRedeemWallet() {
+    try {
+      const addr = await connectWallet();
+      if (addr) setRedeemWallet(addr);
+    } catch {
+      setRedeemStatus("Wallet connection failed or was rejected.");
+    }
+  }
+
+  async function handleRedeem() {
+    const decoded = decodePassToken(redeemToken);
+    if (!decoded || !redeemWallet) {
+      setRedeemStatus("Paste a valid pass token and connect a wallet first.");
+      return;
+    }
+    setBusy(true);
+    setRedeemStatus("Submitting claim on-chain (gasless)…");
+    try {
+      const res = await fetch("/api/claim", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          campaignId: decoded.campaignId,
+          nullifier: decoded.nullifier,
+          recipient: redeemWallet,
+        }),
+      });
+      const data = await res.json();
+      if (!res.ok) {
+        setRedeemStatus(`Claim failed: ${data.error}`);
+      } else {
+        setRedeemTx(data.txHash);
+        setRedeemStatus("Claimed. This pass token is now worthless to anyone else — the nullifier is consumed.");
+      }
+    } catch {
+      setRedeemStatus("Failed to reach Prova.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
   return (
     <div className="max-w-3xl mx-auto px-6 py-12 flex flex-col gap-10">
       <header className="flex flex-col gap-2">
         <h1 className="text-3xl font-semibold tracking-tight">Prova Pass</h1>
         <p className="text-neutral-400">
-          Private STRK20 state → one-time capability → claimed from a wallet nobody can link to it.
+          A general capability layer for private STRK20 state: prove something about holdings
+          you never reveal, get a bearer capability, redeem it from any wallet on earth.
         </p>
       </header>
+
+      <CapabilityFlow stage={flowStage} />
 
       <section className="flex flex-col gap-3">
         <h2 className="text-lg font-medium">1. Pick a campaign</h2>
@@ -151,13 +356,28 @@ export default function ProvaApp() {
         </select>
         {campaign && (
           <div className="text-sm text-neutral-400 border border-neutral-800 rounded-md p-3">
+            <div className="flex gap-2 flex-wrap mb-2">
+              <span className="text-xs px-2 py-0.5 rounded-full border border-neutral-700 text-neutral-300">
+                {predicateTypeTag(campaign.predicate_type)}
+              </span>
+              <span className="text-xs px-2 py-0.5 rounded-full border border-neutral-700 text-neutral-300">
+                {claimKindTag(campaign.claim_kind)}
+              </span>
+            </div>
             <p>{campaign.description}</p>
-            <p className="mt-1">
-              Predicate: held ≥ {campaign.predicate_min_amount} of {short(campaign.predicate_asset)} for ≥{" "}
-              {campaign.predicate_min_days} days
-            </p>
+            <p className="mt-1">Predicate: {predicateLabel(campaign)}</p>
             {campaign.create_tx_hash && (
-              <p className="mt-1 font-mono text-xs">campaign tx: {short(campaign.create_tx_hash)}</p>
+              <p className="mt-1 font-mono text-xs">
+                campaign tx:{" "}
+                <a
+                  className="underline"
+                  href={`https://starkscan.co/tx/${campaign.create_tx_hash}`}
+                  target="_blank"
+                  rel="noreferrer"
+                >
+                  {short(campaign.create_tx_hash)}
+                </a>
+              </p>
             )}
           </div>
         )}
@@ -183,7 +403,10 @@ export default function ProvaApp() {
           Generate Prova Pass
         </button>
         {pass && (
-          <p className="font-mono text-xs text-emerald-400 break-all">nullifier: {pass.nullifier}</p>
+          <div className="flex flex-col gap-2">
+            <p className="font-mono text-xs text-emerald-400 break-all">nullifier: {pass.nullifier}</p>
+            <PassTokenExport pass={pass} />
+          </div>
         )}
       </section>
 
@@ -226,9 +449,70 @@ export default function ProvaApp() {
         )}
       </section>
 
-      {status && (
-        <p className="text-sm text-neutral-400 border-t border-neutral-800 pt-4">{status}</p>
+      {status && <p className="text-sm text-neutral-400 border-t border-neutral-800 pt-4">{status}</p>}
+
+      {localPasses.length > 0 && (
+        <section className="flex flex-col gap-3 border-t border-neutral-800 pt-6">
+          <h2 className="text-lg font-medium">Your passes (this device)</h2>
+          <p className="text-sm text-neutral-500">
+            Passes are bearer capabilities — Prova has no account system and cannot list &quot;your&quot;
+            passes server-side without linking them to you, which defeats the point. This list is saved
+            only in this browser.
+          </p>
+          <ul className="flex flex-col gap-2">
+            {localPasses.map((p) => (
+              <li
+                key={p.nullifier}
+                className="flex items-center justify-between gap-3 border border-neutral-800 rounded-md px-3 py-2 text-sm"
+              >
+                <span>{p.campaignName}</span>
+                <span className="font-mono text-xs text-neutral-500">{short(p.nullifier)}</span>
+              </li>
+            ))}
+          </ul>
+        </section>
       )}
+
+      <section className="flex flex-col gap-3 border-t border-neutral-800 pt-6">
+        <h2 className="text-lg font-medium">Redeem a pass someone gave you</h2>
+        <p className="text-sm text-neutral-500">
+          A Prova Pass is a bearer token. Paste one below — from a friend, a Discord DM, a QR code,
+          anywhere — and claim it from any wallet, without ever having generated it yourself.
+        </p>
+        <textarea
+          className="bg-neutral-900 border border-neutral-700 rounded-md px-3 py-2 font-mono text-xs"
+          rows={3}
+          placeholder="Paste a Prova Pass token here…"
+          value={redeemToken}
+          onChange={(e) => setRedeemToken(e.target.value)}
+        />
+        <div className="flex gap-3 items-center">
+          <button
+            onClick={handleConnectRedeemWallet}
+            disabled={busy}
+            className="px-4 py-2 bg-neutral-100 text-neutral-900 rounded-md font-medium disabled:opacity-50"
+          >
+            Connect wallet
+          </button>
+          <span className="font-mono text-sm text-neutral-400">{short(redeemWallet)}</span>
+        </div>
+        <button
+          onClick={handleRedeem}
+          disabled={busy || !redeemToken || !redeemWallet}
+          className="self-start px-4 py-2 border border-neutral-600 rounded-md disabled:opacity-40"
+        >
+          Redeem
+        </button>
+        {redeemStatus && <p className="text-sm text-neutral-400">{redeemStatus}</p>}
+        {redeemTx && (
+          <p className="font-mono text-xs text-emerald-400 break-all">
+            claim tx:{" "}
+            <a className="underline" href={`https://starkscan.co/tx/${redeemTx}`} target="_blank" rel="noreferrer">
+              {redeemTx}
+            </a>
+          </p>
+        )}
+      </section>
 
       <footer className="text-xs text-neutral-600 border-t border-neutral-800 pt-4">
         See{" "}
@@ -237,6 +521,44 @@ export default function ProvaApp() {
         </a>{" "}
         for exactly what this demo does and does not hide today.
       </footer>
+    </div>
+  );
+}
+
+function PassTokenExport({ pass }: { pass: LocalPass }) {
+  const [copied, setCopied] = useState(false);
+  const token = encodePassToken(pass.campaignId, pass.nullifier);
+
+  async function copy() {
+    try {
+      await navigator.clipboard.writeText(token);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      // clipboard API unavailable — token is still visible below to copy manually
+    }
+  }
+
+  return (
+    <div className="flex flex-col gap-1">
+      <p className="text-xs text-neutral-500">
+        Share this token with anyone — they can redeem it from any wallet, no connection to this
+        browser or wallet A required.
+      </p>
+      <div className="flex gap-2 items-start">
+        <textarea
+          readOnly
+          className="flex-1 bg-neutral-900 border border-neutral-800 rounded-md px-2 py-1 font-mono text-xs"
+          rows={2}
+          value={token}
+        />
+        <button
+          onClick={copy}
+          className="px-3 py-1 border border-neutral-600 rounded-md text-xs shrink-0"
+        >
+          {copied ? "Copied" : "Copy"}
+        </button>
+      </div>
     </div>
   );
 }
