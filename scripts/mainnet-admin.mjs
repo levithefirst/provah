@@ -100,7 +100,12 @@ async function cmdCheckClass() {
   for (const classHash of candidates) {
     const result = await p
       .getClass(classHash)
-      .then(() => "DECLARED")
+      .then((cls) => {
+        const ctor = (cls.abi ?? []).find(
+          (e) => e.type === "constructor" || e.type === "function" && e.name === "constructor"
+        );
+        return "DECLARED constructor=" + JSON.stringify(ctor?.inputs ?? ctor ?? "not in top-level abi");
+      })
       .catch((e) => `not found: ${trimError(e)}`);
     console.log(classHash, "->", result);
   }
