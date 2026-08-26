@@ -186,12 +186,25 @@ async function cmdPoolRegisterViewingKey({ dryRun }) {
 
   const contract = new Contract({ abi: poolAbi, address: POOL_ADDRESS, providerOrAccount: acc });
 
+  // starknet.js needs every ServerAction variant name present (undefined for
+  // the inactive ones) to identify which one is active and how to encode it.
   const action = new CairoCustomEnum({
+    WriteOnce: undefined,
+    Append: undefined,
+    TransferFrom: undefined,
+    TransferTo: undefined,
     EmitViewingKeySet: {
       user_addr: ACCOUNT_ADDRESS,
       public_key: publicKey,
       enc_private_key: { salt: "0x0", enc_token: "0x0" },
     },
+    EmitWithdrawal: undefined,
+    EmitDeposit: undefined,
+    EmitOpenNoteCreated: undefined,
+    EmitEncNoteCreated: undefined,
+    EmitNoteUsed: undefined,
+    Invoke: undefined,
+    InvokeWithComputation: undefined,
   });
   const screening = new CairoOption(CairoOptionVariant.None);
 
