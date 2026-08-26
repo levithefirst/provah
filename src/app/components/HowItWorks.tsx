@@ -7,12 +7,12 @@ const STEPS = [
   {
     n: "02",
     title: "Get a capability",
-    body: "Provah signs a one-time capability bound to a fresh nullifier and hands it to you as a bearer token, not to your wallet. It carries no wallet binding until someone redeems it.",
+    body: "Provah signs a one-time capability bound to a fresh nullifier and hands it to you as a bearer token, not to your wallet. Leave it a pure bearer, or lock it to one destination wallet up front — your choice, enforced before Provah ever signs a claim.",
   },
   {
     n: "03",
     title: "Redeem anywhere",
-    body: "Hand the token to any wallet: brand new, unfunded, or someone else entirely. They claim it, gas-sponsored. The chain records only campaign, nullifier, and recipient, nothing about you.",
+    body: "Hand the token to any wallet: brand new, unfunded, or someone else entirely. They claim it, gas-sponsored. The chain records only campaign, nullifier, and recipient, nothing about you, and anyone can verify the claim landed straight from public RPC, without trusting Provah's word for it.",
   },
 ];
 

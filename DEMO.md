@@ -1,114 +1,72 @@
-# Prova Pass — 3-minute demo script
+# Provah — 90-second demo script
 
-**Live app:** https://provah.vercel.app/ — four live campaigns (three
-predicate types, plus one that pays a real STRK reward on redeem), all on
-the same deployed contract. No setup required to demo the read side.
+**Live app:** https://provah.vercel.app/ — four live campaigns on one deployed
+contract, real mainnet transactions, no setup required to watch.
 
-**Setup before recording:** two or three Starknet wallets/browser profiles
-— Wallet A (holds real STRK20 deposits satisfying at least one campaign's
-predicate), Wallet B (a brand-new wallet with zero balance), and optionally
-a third context (a different browser/device) to make the pass-transfer
-step land as a genuine cross-device handoff rather than two tabs.
+**Setup before recording:** two browser profiles or devices — Wallet A (real
+STRK20 deposit history satisfying at least one campaign's rule) and Wallet B
+(any other wallet, funded or brand new). Keep the "STRK Welcome Reward"
+campaign selected so the reward payout is visible in the same run.
 
-## 0:00 – 0:20 — The problem
+## Hook (0:00–0:10)
 
-"STRK20 gives you private, shielded balances on Starknet. But proving
-something about that activity and *acting* on it publicly usually means
-either revealing the wallet that qualified, or building a custom proof
-system per use case, per app. Prova is a capability layer: it turns any
-provable fact about a wallet's STRK20 pool activity into a portable,
-one-time capability — one that can carry a real reward, not just a record
-— redeemable from a wallet that has no on-chain link to the one that
-qualified."
+*"This is Provah. I can prove something private about my wallet, hand a
+token to a total stranger, and they redeem it — with nothing on-chain ever
+connecting the two wallets. Watch."*
 
-## 0:20 – 0:50 — This isn't one campaign, it's a primitive
+## Flow walkthrough (0:10–1:10)
 
-- Show the campaign switcher: four live campaigns — "STRK Loyalty Drop"
-  (held ≥1 STRK for ≥7 days), "STRK Holder Badge" (balance right now, no
-  duration), "Active Depositor" (deposit count), and "STRK Welcome Reward"
-  (balance right now — but redeeming it pays out real STRK). Point out
-  these are genuinely different predicate types and claim kinds against the
-  *same* deployed contract — no redeploy between them.
-- One line: "the contract never validates what the predicate was — only
-  that Prova's attester signed the claim. That's what makes new predicate
-  types, and new reward campaigns, free."
+1. **(0:10–0:25) Connect Wallet A.** Point at the self-check that appears
+   instantly: *"That check ran in my own browser, against public RPC,
+   independent of Provah — I don't have to trust a server's yes/no, I just
+   watched it happen."*
+2. **(0:25–0:40) Click Generate pass.** *"Provah signs a one-time
+   capability — a bearer token, not tied to my wallet. I could lock it to
+   one destination wallet right now if I wanted a guarantee instead of
+   flexibility — leaving it a bearer token is what makes this handoff
+   possible with a total stranger."* Copy the token. Disconnect Wallet A.
+3. **(0:40–0:55) Switch context.** Paste the token into *"Redeem a pass
+   someone gave you,"* connect Wallet B, click Redeem. *"Zero prior
+   relationship between these two wallets. Gas-sponsored — wallet B needed
+   zero STRK to claim."*
+4. **(0:55–1:10) Point at the result.** The claim tx is real and on
+   mainnet; for the reward campaign, the STRK balance delta (+0.05 STRK)
+   appears in the same panel. *"That's not a receipt. That's STRK that
+   moved, in this transaction, to a wallet that never touched the pool."*
 
-## 0:50 – 1:25 — Generate the pass
+## Closing wow moment (1:10–1:30)
 
-- Connect Wallet A on the "STRK Loyalty Drop" campaign.
-- Point out the **self-check** that appears immediately: "✅ You qualify."
-  Narrate: "that just ran entirely in my browser, against public RPC — the
-  exact same logic Prova's server uses, open-source, independently
-  re-derived. I don't have to trust Prova's yes/no, I just watched it
-  happen myself."
-- Click **Generate Prova Pass**. Narrate: Prova checks the predicate,
-  derives a nullifier, hands back a pass — call out the hero visual (Wallet
-  A → Pass → Wallet B) highlighting that the pass isn't tied to any
-  specific claiming wallet yet.
-- Disconnect Wallet A on camera — emphasize this.
+Click **Verify on-chain**. *"This is the part that matters: that check
+isn't Provah's word. It's my own browser reading `is_nullifier_consumed`
+straight off Starknet mainnet, right now, independent of Provah's backend
+entirely. Anyone watching this can do exactly what I just did."*
 
-## 1:25 – 2:00 — The wow moment: hand the capability to someone else
+## Backup plan
 
-- Copy the exported pass token from the UI.
-- Switch to a second browser/device with zero relationship to the first —
-  paste the token into **"Redeem a pass someone gave you,"** connect any
-  wallet, and claim. Narrate: "this is the same claim endpoint, the same
-  gasless relay — the only thing that crossed between these two contexts
-  is a string of text. That's the capability, made literal."
-- Show the resulting tx hash on Starkscan. Point at the calldata:
-  `campaign_id`, `nullifier`, `recipient`, a signature — nothing that names
-  Wallet A.
+If a wallet extension isn't available in the recording environment, or the
+live connect flow hiccups: fall back to `strk20.json` in the repo and pull
+up the already-confirmed transactions directly on Starkscan — in
+particular tx #10, the real reward claim, and narrate the same balance
+delta from the block explorer instead of the live UI. The claim already
+happened for real; the on-chain record doesn't depend on the live demo
+working in the moment.
 
-## 2:00 – 2:15 — Prove the nullifier is consumed
+## Cut list if running long
 
-- Try to claim again with the same token — show the on-chain revert
-  (`nullifier consumed`).
-- Click **Verify on-chain** in the UI right after the claim — narrate that
-  this isn't Provah's database talking, it's a fresh `is_nullifier_consumed`
-  call the browser itself makes against public RPC. Provable without
-  trusting Prova's backend at all.
+1. Cut the self-check narration in step 1 — let the "✅ You qualify" text
+   speak for itself, keep moving.
+2. Cut the destination-binding aside in step 2 — mention it exists, don't
+   demo it live.
+3. If still over: skip the reward campaign and use a plain capability
+   campaign instead, cutting straight from claim to Verify on-chain.
+   The unlinkable cross-wallet claim plus independent verification is the
+   core of the pitch; the reward payout is the strongest add-on, not the
+   argument itself.
 
-## 2:15 – 2:20 — Optional: lock a pass to one wallet
+## Longer walkthrough
 
-- Back on step 2, check **"Lock this pass to one destination wallet"** and
-  paste Wallet B's address before generating. Narrate: "by default this is
-  a pure bearer token — anyone gets to choose the destination. Checking
-  this box is the issuer choosing that destination instead, and the server
-  refuses to sign a claim to anyone else — not a UI restriction, enforced
-  in `/api/claim` before the attestation exists."
-
-## 2:20 – 2:40 — Redeem doesn't just record a claim, it can pay one out
-
-- Switch to the "STRK Welcome Reward" campaign. Point at the reward-pool
-  balance shown live on the campaign card — "that's the contract's real
-  STRK balance, read from the chain right now; that number is the hard
-  cap on what this system could ever pay out, even in the worst case."
-- Generate and redeem a pass the same way. Pull up the recipient's STRK
-  balance on Starkscan before and after: it goes from whatever it was to
-  exactly `+0.05 STRK`, in the same transaction that consumed the
-  nullifier.
-- One line: "this isn't a special case — `claim_with_prova_pass` always had
-  this payout path; we just funded the contract and pointed a campaign at
-  it. Every reward campaign works exactly like this."
-
-## 2:40 – 2:55 — Why it matters: what's private, what's not
-
-- One line on the honest trust boundary: "the predicate check is evaluated
-  against the pool's *public* deposit events, not hidden note state — and
-  it's a signed server attestation today, not a client-side ZK proof. We
-  tried to close that gap this pass too: a real, hand-built transaction
-  against the pool's least-restrictive action reverted with the pool's own
-  `EMPTY_PROOF_FACTS` error, proving on-chain that the mainnet proving
-  service needed for that isn't reachable yet — not just undocumented."
-  What's cryptographically guaranteed regardless of trusting that
-  attestation: no replay, no redirecting a signed pass to a different
-  campaign or recipient, and reward terms fixed at campaign creation, not
-  chosen at claim time.
-
-## 2:55 – 3:00 — Close
-
-"Prova Pass: honest public eligibility in, a portable, value-bearing
-capability out, consumed exactly once, from anywhere — four campaigns, one
-contract, ten real mainnet transactions, one of which pays out real STRK on
-redeem. Repo, architecture, and the exact list of what's private and what's
-not are all linked below."
+For a judge who wants the full picture beyond 90 seconds — all four
+predicate types, the destination-binding demo, the reward-pool solvency
+display, and the honest trust-boundary explanation — see `STATUS.md` and
+the README's "Try the live demo" section, which cover the same flow with
+every feature included, unhurried.

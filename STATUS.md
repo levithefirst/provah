@@ -2,6 +2,10 @@
 
 Last updated: 2026-08-26 · **Submission-ready.**
 
+> **Why Provah:** it turns private eligibility into a capability — transferable,
+> optionally destination-locked, and independently verifiable by anyone — not
+> just a signed promise you have to take Provah's word for.
+
 ## Why this deserves first place
 
 Most STRK20 submissions will show one wallet proving one fact to itself.
@@ -369,9 +373,9 @@ claim flow need no changes at all.
 
 - [x] Public GitHub repo with license (MIT; vendored StarkWare code keeps
       its own Apache-2.0 `LICENSE`)
-- [x] ≥3 real mainnet transactions (7, listed above)
+- [x] ≥3 real mainnet transactions (10, listed above)
 - [x] Live public demo URL (https://provah.vercel.app/)
-- [x] 3-minute demo script (`DEMO.md`)
+- [x] 90-second demo script (`DEMO.md`)
 - [x] Complete `strk20.json`
 - [x] README explains what's private vs. public
 - [x] Full user flow works live: generate a pass from one wallet, claim

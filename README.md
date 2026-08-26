@@ -2,6 +2,10 @@
 
 **Live demo:** [provah.vercel.app](https://provah.vercel.app/) · **Contract:** [`0x74614e0cd54af7e59987a5d74fdd028209feff01fc20eca2934fe80b94db402`](https://starkscan.co/contract/0x74614e0cd54af7e59987a5d74fdd028209feff01fc20eca2934fe80b94db402) · **10 mainnet transactions, 4 live campaigns, real STRK reward payouts on redeem:** see below · **Status:** [`STATUS.md`](STATUS.md)
 
+> **Why Provah:** it turns private eligibility into a capability — transferable,
+> optionally destination-locked, and independently verifiable by anyone — not
+> just a signed promise you have to take Provah's word for.
+
 Prova Pass is not a selective-disclosure dashboard. It's a **capability
 layer**: a way to turn *any* provable fact about STRK20 pool activity — a
 holding period, a balance threshold, a deposit count, or anything else
@@ -51,7 +55,7 @@ against the live mainnet privacy pool at
 2. **Connect wallet A** — a wallet with real STRK20 deposit history. The
    app immediately runs an independent, client-side eligibility check
    against public RPC — watch it agree with the server before you even
-   click anything. Then click **Generate Prova Pass**: Prova checks the
+   click anything. Then click **Generate pass**: Prova checks the
    same predicate against its public deposit events and hands back a pass
    tied to a fresh nullifier.
 3. Copy the pass token, or just disconnect wallet A. **Connect wallet B** —
@@ -232,9 +236,14 @@ transaction-prover (`starknet_proveTransaction`). We checked for a public
 endpoint across every source we could find — the hackathon repo, the
 starter kit, the official `starknet-privacy` reference demo (which ships
 the URL as a literal unfilled `TODO_MAINNET_PROVER_URL`) — and asked
-directly via a hackathon-repo issue. As of this write-up, a maintainer
-thread asking the identical question ([issue #147](https://github.com/starkience/strk20-hackathon/issues/147),
-opened days before this project) is still unanswered.
+directly via a hackathon-repo issue. **This isn't a Provah-specific gap:**
+the hackathon repo has three separate open issues asking the identical
+question from different teams — [#204](https://github.com/starkience/strk20-hackathon/issues/204),
+[#147](https://github.com/starkience/strk20-hackathon/issues/147), and
+[#121](https://github.com/starkience/strk20-hackathon/issues/121) — and as
+of this write-up, none has a maintainer response. Every team building a
+real per-claim proof against this pool on mainnet is blocked on the same
+unpublished infrastructure; this isn't a corner Provah cut.
 
 We went one step further than checking docs: we hand-built and submitted a
 real fee-estimation call for `EmitViewingKeySet` — the one pool action the
