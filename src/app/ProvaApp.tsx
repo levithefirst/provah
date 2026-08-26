@@ -33,15 +33,20 @@ function short(addr: string | null | undefined) {
   return addr.slice(0, 6) + "…" + addr.slice(-4);
 }
 
+function formatStrk(amountWei: string): string {
+  const asNum = Number(BigInt(amountWei)) / 1e18;
+  return `${asNum} STRK`;
+}
+
 function predicateLabel(c: Campaign): string {
   switch (c.predicate_type) {
     case "balance_threshold":
-      return `Balance ≥ ${c.predicate_min_amount} of ${short(c.predicate_asset)} (any time)`;
+      return `Hold ≥ ${formatStrk(c.predicate_min_amount)} right now — no minimum holding period`;
     case "deposit_count":
-      return `≥ ${c.predicate_min_amount} deposits of ${short(c.predicate_asset)} into the pool`;
+      return `Make ≥ ${c.predicate_min_amount} separate deposit(s) into the pool — activity, not balance`;
     case "held_since":
     default:
-      return `Held ≥ ${c.predicate_min_amount} of ${short(c.predicate_asset)} for ≥ ${c.predicate_min_days} days`;
+      return `Hold ≥ ${formatStrk(c.predicate_min_amount)} for ≥ ${c.predicate_min_days} days`;
   }
 }
 
@@ -124,31 +129,38 @@ function CapabilityFlow({
   const reached = (s: string) => order.indexOf(s) <= order.indexOf(stage === "idle" ? "" : stage);
 
   const nodeClass = (active: boolean, done: boolean) =>
-    `flex flex-col items-center justify-center gap-1 rounded-xl border px-4 py-3 min-w-[8rem] transition-colors ${
+    `relative flex flex-col items-center justify-center gap-1 rounded-xl border px-4 py-4 min-w-[9rem] transition-colors ${
       done
         ? "border-emerald-500/60 bg-emerald-500/10 text-emerald-300"
         : active
-          ? "border-neutral-100 bg-neutral-100/10 text-neutral-100"
+          ? "border-neutral-100 bg-neutral-100/10 text-neutral-100 ring-2 ring-neutral-100/40 animate-pulse"
           : "border-neutral-800 text-neutral-500"
     }`;
 
   const arrowClass = (done: boolean) =>
-    `h-px flex-1 min-w-[2rem] ${done ? "bg-emerald-500/60" : "bg-neutral-800"}`;
+    `h-px flex-1 min-w-[1.5rem] sm:min-w-[2.5rem] ${done ? "bg-emerald-500/60" : "bg-neutral-800"}`;
 
   return (
     <div className="rounded-xl border border-neutral-800 bg-neutral-950/50 p-5">
-      <div className="flex items-center justify-center gap-2 sm:gap-4 overflow-x-auto">
+      <p className="text-center text-base font-medium mb-4">
+        🔒 Private balance <span className="text-neutral-500">turns into</span> 🎫 a bearer capability{" "}
+        <span className="text-neutral-500">— redeemed by</span> 🔓 any wallet, unlinked.
+      </p>
+      <div className="flex items-center justify-center gap-1 sm:gap-3 overflow-x-auto">
         <div className={nodeClass(stage === "wallet-a", reached("wallet-a"))}>
+          <span className="text-2xl leading-none">🔒</span>
           <span className="text-xs uppercase tracking-wide opacity-70">Wallet A</span>
           <span className="text-sm font-medium">private holder</span>
         </div>
         <div className={arrowClass(reached("pass"))} />
         <div className={nodeClass(stage === "pass", reached("pass"))}>
+          <span className="text-2xl leading-none">🎫</span>
           <span className="text-xs uppercase tracking-wide opacity-70">Prova Pass</span>
           <span className="text-sm font-medium">bearer capability</span>
         </div>
         <div className={arrowClass(reached("wallet-b"))} />
         <div className={nodeClass(stage === "wallet-b" || stage === "claimed", reached("wallet-b"))}>
+          <span className="text-2xl leading-none">🔓</span>
           <span className="text-xs uppercase tracking-wide opacity-70">Wallet B</span>
           <span className="text-sm font-medium">fresh, zero gas</span>
         </div>
@@ -350,7 +362,7 @@ export default function ProvaApp() {
           {campaigns.length === 0 && <option value="">No campaigns yet</option>}
           {campaigns.map((c) => (
             <option key={c.id} value={c.id}>
-              {c.name}
+              {c.name} — {predicateTypeTag(c.predicate_type)}
             </option>
           ))}
         </select>
