@@ -12,7 +12,7 @@ export default function Home() {
   return (
     <>
       <Header />
-      <main className="flex-1 bg-white">
+      <main className="flex-1 bg-white dark:bg-neutral-950">
         <Hero />
         <Problem />
         <HowItWorks />

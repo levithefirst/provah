@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import ThemeToggle from "./ThemeToggle";
 
 const NAV_LINKS = [
   { href: "#how-it-works", label: "How it works" },
@@ -24,11 +25,11 @@ export default function Header() {
   const [open, setOpen] = useState(false);
 
   return (
-    <header className="sticky top-0 z-50 border-b border-neutral-200/80 bg-white/80 backdrop-blur-md">
+    <header className="sticky top-0 z-50 border-b border-neutral-200/80 bg-white/80 backdrop-blur-md dark:border-neutral-800/80 dark:bg-neutral-950/80">
       <div className="mx-auto flex max-w-6xl items-center justify-between px-6 py-4">
-        <a href="#top" className="flex items-center gap-2.5 font-semibold text-neutral-900">
+        <a href="#top" className="flex items-center gap-2.5 font-semibold text-neutral-900 dark:text-neutral-50">
           <LogoMark />
-          <span className="text-lg tracking-tight">Prova Pass</span>
+          <span className="text-lg tracking-tight">Provah</span>
         </a>
 
         <nav className="hidden items-center gap-8 md:flex">
@@ -36,7 +37,7 @@ export default function Header() {
             <a
               key={l.label}
               href={l.href}
-              className="text-sm font-medium text-neutral-600 transition-colors hover:text-neutral-900"
+              className="text-sm font-medium text-neutral-600 transition-colors hover:text-neutral-900 dark:text-neutral-400 dark:hover:text-neutral-50"
               target={l.href.startsWith("http") ? "_blank" : undefined}
               rel={l.href.startsWith("http") ? "noreferrer" : undefined}
             >
@@ -46,15 +47,18 @@ export default function Header() {
         </nav>
 
         <div className="flex items-center gap-3">
+          <div className="hidden sm:block">
+            <ThemeToggle />
+          </div>
           <a
             href="#app"
-            className="hidden rounded-full bg-neutral-900 px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition-colors hover:bg-neutral-800 sm:inline-block"
+            className="hidden rounded-full bg-neutral-900 px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition-all hover:-translate-y-0.5 hover:bg-neutral-800 active:translate-y-0 sm:inline-block dark:bg-white dark:text-neutral-900 dark:hover:bg-neutral-200"
           >
-            Launch App
+            Launch app
           </a>
           <button
             onClick={() => setOpen((v) => !v)}
-            className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-neutral-200 text-neutral-700 md:hidden"
+            className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-neutral-200 text-neutral-700 transition-colors md:hidden dark:border-neutral-800 dark:text-neutral-300"
             aria-label="Toggle menu"
           >
             {open ? (
@@ -71,26 +75,30 @@ export default function Header() {
       </div>
 
       {open && (
-        <div className="border-t border-neutral-200 bg-white px-6 py-4 md:hidden">
+        <div className="border-t border-neutral-200 bg-white px-6 py-4 md:hidden dark:border-neutral-800 dark:bg-neutral-950">
           <div className="flex flex-col gap-4">
             {NAV_LINKS.map((l) => (
               <a
                 key={l.label}
                 href={l.href}
                 onClick={() => setOpen(false)}
-                className="text-sm font-medium text-neutral-700"
+                className="text-sm font-medium text-neutral-700 dark:text-neutral-300"
                 target={l.href.startsWith("http") ? "_blank" : undefined}
                 rel={l.href.startsWith("http") ? "noreferrer" : undefined}
               >
                 {l.label}
               </a>
             ))}
+            <div className="flex items-center justify-between gap-3 border-t border-neutral-200 pt-4 dark:border-neutral-800">
+              <span className="text-sm font-medium text-neutral-500 dark:text-neutral-400">Theme</span>
+              <ThemeToggle />
+            </div>
             <a
               href="#app"
               onClick={() => setOpen(false)}
-              className="rounded-full bg-neutral-900 px-5 py-2.5 text-center text-sm font-semibold text-white"
+              className="rounded-full bg-neutral-900 px-5 py-2.5 text-center text-sm font-semibold text-white dark:bg-white dark:text-neutral-900"
             >
-              Launch App
+              Launch app
             </a>
           </div>
         </div>

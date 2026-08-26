@@ -172,7 +172,7 @@ function CapabilityFlow({
         <div className={arrowClass(reached("pass"))} />
         <div className={nodeClass(stage === "pass", reached("pass"))}>
           <span className="text-2xl leading-none">🎫</span>
-          <span className="text-xs uppercase tracking-wide opacity-70">Prova Pass</span>
+          <span className="text-xs uppercase tracking-wide opacity-70">Provah Pass</span>
           <span className="text-sm font-medium">bearer capability</span>
         </div>
         <div className={arrowClass(reached("wallet-b"))} />
@@ -183,7 +183,7 @@ function CapabilityFlow({
         </div>
       </div>
       <p className="mt-4 text-center text-xs text-neutral-500">
-        No on-chain link, no shared address, no Prova-stored mapping between A and B. The pass
+        No on-chain link, no shared address, no Provah-stored mapping between A and B. The pass
         itself is the only thing that crosses between them.
       </p>
     </div>
@@ -204,6 +204,7 @@ export default function ProvaApp() {
   const [redeemWallet, setRedeemWallet] = useState<string>("");
   const [redeemTx, setRedeemTx] = useState<string | null>(null);
   const [redeemStatus, setRedeemStatus] = useState<string>("");
+  const [campaignsLoading, setCampaignsLoading] = useState(true);
 
   useEffect(() => {
     setLocalPasses(loadLocalPasses());
@@ -214,7 +215,8 @@ export default function ProvaApp() {
         if (d.campaigns?.[0]) setSelected(d.campaigns[0].id);
         if (d.error) setStatus(`Could not load campaigns: ${d.error}`);
       })
-      .catch((err) => setStatus(`Could not load campaigns: ${err instanceof Error ? err.message : String(err)}`));
+      .catch((err) => setStatus(`Could not load campaigns: ${err instanceof Error ? err.message : String(err)}`))
+      .finally(() => setCampaignsLoading(false));
   }, []);
 
   const campaign = campaigns.find((c) => c.id === selected);
@@ -269,12 +271,12 @@ export default function ProvaApp() {
         };
         setPass(newPass);
         addLocalPass(newPass);
-        setStatus("Prova Pass issued. Disconnect, then connect a completely different wallet to claim.");
+        setStatus("Pass issued. Disconnect, then connect a completely different wallet to claim.");
         await disconnect();
         setProverWallet(null);
       }
     } catch {
-      setStatus("Failed to reach Prova.");
+      setStatus("Failed to reach Provah.");
     } finally {
       setBusy(false);
     }
@@ -292,7 +294,7 @@ export default function ProvaApp() {
   async function handleClaim() {
     if (!campaign || !pass || !claimWallet) return;
     setBusy(true);
-    setStatus("Submitting claim on-chain (gasless: Prova relays it)…");
+    setStatus("Submitting claim on-chain (gasless: Provah relays it)…");
     try {
       const res = await fetch("/api/claim", {
         method: "POST",
@@ -307,7 +309,7 @@ export default function ProvaApp() {
         setStatus("Claimed. The nullifier is now consumed, this pass cannot be reused.");
       }
     } catch {
-      setStatus("Failed to reach Prova.");
+      setStatus("Failed to reach Provah.");
     } finally {
       setBusy(false);
     }
@@ -348,7 +350,7 @@ export default function ProvaApp() {
         setRedeemStatus("Claimed. This pass token is now worthless to anyone else, the nullifier is consumed.");
       }
     } catch {
-      setRedeemStatus("Failed to reach Prova.");
+      setRedeemStatus("Failed to reach Provah.");
     } finally {
       setBusy(false);
     }
@@ -361,20 +363,42 @@ export default function ProvaApp() {
       <section className="flex flex-col gap-3 rounded-3xl border border-neutral-800 bg-neutral-900/40 p-6 sm:p-8">
         <h2 className="text-lg font-medium">1. Pick a campaign</h2>
         <select
-          className="bg-neutral-900 border border-neutral-700 rounded-md px-3 py-2"
+          className="w-full rounded-md border border-neutral-700 bg-neutral-900 px-3 py-2.5 text-neutral-100 transition-colors focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/40 sm:w-auto"
           value={selected}
+          disabled={campaignsLoading}
           onChange={(e) => {
             setSelected(e.target.value);
             setPass(null);
           }}
         >
-          {campaigns.length === 0 && <option value="">No campaigns yet</option>}
+          {campaignsLoading && <option value="">Loading campaigns…</option>}
+          {!campaignsLoading && campaigns.length === 0 && <option value="">No campaigns yet</option>}
           {campaigns.map((c) => (
             <option key={c.id} value={c.id}>
               {c.name} ({predicateTypeTag(c.predicate_type)})
             </option>
           ))}
         </select>
+        {campaignsLoading && (
+          <div className="animate-pulse rounded-md border border-neutral-800 bg-neutral-900/60 p-3">
+            <div className="h-3 w-2/3 rounded bg-neutral-800" />
+            <div className="mt-2 h-3 w-1/2 rounded bg-neutral-800" />
+          </div>
+        )}
+        {!campaignsLoading && campaigns.length === 0 && !status && (
+          <p className="text-sm text-neutral-500">
+            No campaigns are live right now. Check back shortly, or see{" "}
+            <a
+              className="underline hover:text-neutral-300"
+              href="https://github.com/levithefirst/provah"
+              target="_blank"
+              rel="noreferrer"
+            >
+              the repo
+            </a>{" "}
+            for how one gets created.
+          </p>
+        )}
         {campaign && (
           <div className="text-sm text-neutral-400 border border-neutral-800 rounded-md p-3">
             <div className="flex gap-2 flex-wrap mb-2">
@@ -389,7 +413,7 @@ export default function ProvaApp() {
               </span>
             </div>
             <p>{campaign.description}</p>
-            <p className="mt-1">Predicate: {predicateLabel(campaign)}</p>
+            <p className="mt-1">Rule: {predicateLabel(campaign)}</p>
             {rewardLabel(campaign) && (
               <p className="mt-2 rounded-md border border-emerald-800 bg-emerald-500/10 px-2 py-1.5 text-emerald-300">
                 💰 {rewardLabel(campaign)}
@@ -399,7 +423,7 @@ export default function ProvaApp() {
               <p className="mt-1 font-mono text-xs">
                 campaign tx:{" "}
                 <a
-                  className="underline"
+                  className="underline hover:text-neutral-200"
                   href={`https://starkscan.co/tx/${campaign.create_tx_hash}`}
                   target="_blank"
                   rel="noreferrer"
@@ -415,14 +439,14 @@ export default function ProvaApp() {
       <section className="flex flex-col gap-3 rounded-3xl border border-neutral-800 bg-neutral-900/40 p-6 sm:p-8">
         <h2 className="text-lg font-medium">2. Connect the wallet with qualifying pool activity, generate a pass</h2>
         <p className="text-xs text-neutral-500">
-          Prova checks this wallet&apos;s public STRK20 deposit history against the campaign&apos;s
-          predicate. It never sees or needs a private key, viewing key, or signature from it.
+          Provah checks this wallet&apos;s public STRK20 deposit history against the campaign&apos;s
+          rule. It never sees or needs a private key, viewing key, or signature from it.
         </p>
-        <div className="flex gap-3 items-center">
+        <div className="flex flex-wrap items-center gap-3">
           <button
             onClick={handleConnectProver}
             disabled={busy}
-            className="px-4 py-2 bg-neutral-100 text-neutral-900 rounded-md font-medium disabled:opacity-50"
+            className="rounded-md bg-neutral-100 px-4 py-2.5 font-medium text-neutral-900 transition-all hover:-translate-y-0.5 hover:bg-white active:translate-y-0 disabled:pointer-events-none disabled:opacity-50"
           >
             Connect wallet A
           </button>
@@ -431,9 +455,9 @@ export default function ProvaApp() {
         <button
           onClick={handleGeneratePass}
           disabled={busy || !proverWallet || !campaign}
-          className="self-start px-4 py-2 border border-neutral-600 rounded-md text-neutral-100 disabled:opacity-40"
+          className="self-start rounded-md border border-neutral-600 px-4 py-2.5 text-neutral-100 transition-all hover:-translate-y-0.5 hover:border-neutral-400 active:translate-y-0 disabled:pointer-events-none disabled:opacity-40"
         >
-          Generate Prova Pass
+          Generate pass
         </button>
         {pass && (
           <div className="flex flex-col gap-2">
@@ -445,7 +469,7 @@ export default function ProvaApp() {
             )}
             <p className="rounded-md border border-amber-800 bg-amber-500/10 px-2 py-1.5 text-xs text-amber-300">
               ⚠️ This is a pure bearer token, by design. Anyone holding the raw text below can
-              redeem it to a destination wallet of <em>their</em> choosing. Prova does not support
+              redeem it to a destination wallet of <em>their</em> choosing. Provah does not support
               locking a pass to one recipient. Treat it like cash: keep it secret until you hand it
               off or redeem it yourself.
             </p>
@@ -456,11 +480,11 @@ export default function ProvaApp() {
 
       <section className="flex flex-col gap-3 rounded-3xl border border-neutral-800 bg-neutral-900/40 p-6 sm:p-8">
         <h2 className="text-lg font-medium">3. Connect a different wallet, claim</h2>
-        <div className="flex gap-3 items-center">
+        <div className="flex flex-wrap items-center gap-3">
           <button
             onClick={handleConnectClaimWallet}
             disabled={busy || !pass}
-            className="px-4 py-2 bg-neutral-100 text-neutral-900 rounded-md font-medium disabled:opacity-50"
+            className="rounded-md bg-neutral-100 px-4 py-2.5 font-medium text-neutral-900 transition-all hover:-translate-y-0.5 hover:bg-white active:translate-y-0 disabled:pointer-events-none disabled:opacity-50"
           >
             Connect wallet B
           </button>
@@ -474,15 +498,15 @@ export default function ProvaApp() {
         <button
           onClick={handleClaim}
           disabled={busy || !pass || !claimWallet}
-          className="self-start px-4 py-2 border border-neutral-600 rounded-md text-neutral-100 disabled:opacity-40"
+          className="self-start rounded-md border border-neutral-600 px-4 py-2.5 text-neutral-100 transition-all hover:-translate-y-0.5 hover:border-neutral-400 active:translate-y-0 disabled:pointer-events-none disabled:opacity-40"
         >
           Claim
         </button>
         {claimTx && (
-          <p className="font-mono text-xs text-emerald-400 break-all">
-            claim tx:{" "}
+          <p className="rounded-md border border-emerald-800 bg-emerald-500/10 px-3 py-2 font-mono text-xs text-emerald-300 break-all">
+            ✅ claim tx:{" "}
             <a
-              className="underline"
+              className="underline hover:text-emerald-200"
               href={`https://starkscan.co/tx/${claimTx}`}
               target="_blank"
               rel="noreferrer"
@@ -503,7 +527,7 @@ export default function ProvaApp() {
         <section className="flex flex-col gap-3 rounded-3xl border border-neutral-800 bg-neutral-900/40 p-6 sm:p-8">
           <h2 className="text-lg font-medium">Your passes (this device)</h2>
           <p className="text-sm text-neutral-500">
-            Passes are bearer capabilities. Prova has no account system and cannot list &quot;your&quot;
+            Passes are bearer capabilities. Provah has no account system and cannot list &quot;your&quot;
             passes server-side without linking them to you, which defeats the point. This list is saved
             only in this browser.
           </p>
@@ -511,7 +535,7 @@ export default function ProvaApp() {
             {localPasses.map((p) => (
               <li
                 key={p.nullifier}
-                className="flex items-center justify-between gap-3 border border-neutral-800 rounded-md px-3 py-2 text-sm"
+                className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-neutral-800 px-3 py-2.5 text-sm transition-colors hover:border-neutral-700"
               >
                 <span>{p.campaignName}</span>
                 <span className="font-mono text-xs text-neutral-500">{short(p.nullifier)}</span>
@@ -524,21 +548,21 @@ export default function ProvaApp() {
       <section className="flex flex-col gap-3 rounded-3xl border border-neutral-800 bg-neutral-900/40 p-6 sm:p-8">
         <h2 className="text-lg font-medium">Redeem a pass someone gave you</h2>
         <p className="text-sm text-neutral-500">
-          A Prova Pass is a bearer token. Paste one below (from a friend, a Discord DM, a QR code,
+          A Provah pass is a bearer token. Paste one below (from a friend, a Discord DM, a QR code,
           anywhere) and claim it from any wallet, without ever having generated it yourself.
         </p>
         <textarea
-          className="bg-neutral-900 border border-neutral-700 rounded-md px-3 py-2 font-mono text-xs"
+          className="rounded-md border border-neutral-700 bg-neutral-900 px-3 py-2 font-mono text-xs transition-colors focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/40"
           rows={3}
-          placeholder="Paste a Prova Pass token here…"
+          placeholder="Paste a Provah pass token here…"
           value={redeemToken}
           onChange={(e) => setRedeemToken(e.target.value)}
         />
-        <div className="flex gap-3 items-center">
+        <div className="flex flex-wrap items-center gap-3">
           <button
             onClick={handleConnectRedeemWallet}
             disabled={busy}
-            className="px-4 py-2 bg-neutral-100 text-neutral-900 rounded-md font-medium disabled:opacity-50"
+            className="rounded-md bg-neutral-100 px-4 py-2.5 font-medium text-neutral-900 transition-all hover:-translate-y-0.5 hover:bg-white active:translate-y-0 disabled:pointer-events-none disabled:opacity-50"
           >
             Connect wallet
           </button>
@@ -547,15 +571,20 @@ export default function ProvaApp() {
         <button
           onClick={handleRedeem}
           disabled={busy || !redeemToken || !redeemWallet}
-          className="self-start px-4 py-2 border border-neutral-600 rounded-md text-neutral-100 disabled:opacity-40"
+          className="self-start rounded-md border border-neutral-600 px-4 py-2.5 text-neutral-100 transition-all hover:-translate-y-0.5 hover:border-neutral-400 active:translate-y-0 disabled:pointer-events-none disabled:opacity-40"
         >
           Redeem
         </button>
         {redeemStatus && <p className="text-sm text-neutral-400">{redeemStatus}</p>}
         {redeemTx && (
-          <p className="font-mono text-xs text-emerald-400 break-all">
-            claim tx:{" "}
-            <a className="underline" href={`https://starkscan.co/tx/${redeemTx}`} target="_blank" rel="noreferrer">
+          <p className="rounded-md border border-emerald-800 bg-emerald-500/10 px-3 py-2 font-mono text-xs text-emerald-300 break-all">
+            ✅ claim tx:{" "}
+            <a
+              className="underline hover:text-emerald-200"
+              href={`https://starkscan.co/tx/${redeemTx}`}
+              target="_blank"
+              rel="noreferrer"
+            >
               {redeemTx}
             </a>
           </p>
@@ -585,18 +614,22 @@ function PassTokenExport({ pass }: { pass: LocalPass }) {
         Share this token with anyone. They can redeem it from any wallet, no connection to this
         browser or wallet A required.
       </p>
-      <div className="flex gap-2 items-start">
+      <div className="flex items-start gap-2">
         <textarea
           readOnly
-          className="flex-1 bg-neutral-900 border border-neutral-800 rounded-md px-2 py-1 font-mono text-xs"
+          className="flex-1 rounded-md border border-neutral-800 bg-neutral-900 px-2 py-1.5 font-mono text-xs"
           rows={2}
           value={token}
         />
         <button
           onClick={copy}
-          className="px-3 py-1 border border-neutral-600 rounded-md text-xs text-neutral-100 shrink-0"
+          className={`shrink-0 rounded-md border px-3 py-1.5 text-xs font-medium transition-all active:scale-95 ${
+            copied
+              ? "border-emerald-700 bg-emerald-500/10 text-emerald-300"
+              : "border-neutral-600 text-neutral-100 hover:border-neutral-400"
+          }`}
         >
-          {copied ? "Copied" : "Copy"}
+          {copied ? "✓ Copied" : "Copy"}
         </button>
       </div>
     </div>

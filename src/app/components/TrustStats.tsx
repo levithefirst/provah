@@ -6,12 +6,12 @@ const STATS = [
 
 export default function TrustStats() {
   return (
-    <section className="bg-white py-24">
+    <section className="bg-white py-24 dark:bg-neutral-950">
       <div className="mx-auto max-w-6xl px-6">
-        <div className="rounded-3xl border border-neutral-200 bg-neutral-900 px-8 py-14 text-white sm:px-14">
+        <div className="rounded-3xl border border-neutral-200 bg-neutral-900 px-8 py-14 text-white sm:px-14 dark:border-neutral-800">
           <div className="flex flex-col items-center gap-3 text-center">
             <span className="inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/5 px-4 py-1.5 text-xs font-medium text-neutral-300">
-              Built on Starknet · STRK20 Private Sprint
+              Built on Starknet · STRK20
             </span>
             <h2 className="max-w-2xl text-2xl font-semibold tracking-tight sm:text-3xl">
               Real mainnet activity, not a testnet screenshot
@@ -50,7 +50,7 @@ export default function TrustStats() {
               for the full, machine-readable list.
             </p>
             <p className="max-w-xl text-xs text-neutral-500">
-              Honest note: the predicate check itself is a signed server attestation today, not a
+              Honest note: the rule check itself is a signed server attestation today, not a
               client-side ZK proof. The mainnet proving service the fully trustless version needs
               has no published endpoint. See{" "}
               <a

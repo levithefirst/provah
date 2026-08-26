@@ -1,8 +1,17 @@
 @import "tailwindcss";
 
+@custom-variant dark (&:where(.dark, .dark *));
+
 :root {
   --background: #ffffff;
   --foreground: #111113;
+  --bg-alt: #f7f7f9;
+}
+
+.dark {
+  --background: #0c0e12;
+  --foreground: #f2f2f4;
+  --bg-alt: #111318;
 }
 
 @theme inline {
@@ -27,4 +36,14 @@ body {
   background-size: 22px 22px;
   mask-image: radial-gradient(ellipse 60% 55% at 50% 0%, black 40%, transparent 80%);
   -webkit-mask-image: radial-gradient(ellipse 60% 55% at 50% 0%, black 40%, transparent 80%);
+}
+
+.dark .bg-dot-grid {
+  background-image: radial-gradient(circle, rgba(255, 255, 255, 0.12) 1px, transparent 1px);
+}
+
+* {
+  transition-property: background-color, border-color, color, box-shadow;
+  transition-duration: 200ms;
+  transition-timing-function: ease;
 }
