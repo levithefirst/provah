@@ -1,6 +1,6 @@
 const STATS = [
-  { value: "7", label: "Confirmed mainnet transactions" },
-  { value: "3", label: "Live campaigns, 3 predicate types" },
+  { value: "10", label: "Confirmed mainnet transactions" },
+  { value: "4", label: "Live campaigns — one pays a real STRK reward" },
   { value: "1", label: "Contract, zero redeploys between them" },
 ];
 
