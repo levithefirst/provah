@@ -104,22 +104,55 @@ function signAttestation(campaignId, nullifier, recipient) {
   return { r: "0x" + sig.r.toString(16), s: "0x" + sig.s.toString(16) };
 }
 
+const STRK_TOKEN = "0x04718f5a0fc34cc1af16a1cdee98ffb20c31f5cd61d6ab07201858f4287c938d";
+const ETH_TOKEN = "0x049d36570d4e46f48e99674bd3fcc84644ddd6b96f7c741b1562b82f9e004dc7";
+
+/**
+ * balance [address] — defaults to the operating account, but accepts any
+ * address so a reward payout's recipient balance can be checked
+ * before/after a claim without needing that address's private key at all.
+ */
 async function cmdBalance() {
   const p = provider();
-  const STRK = "0x04718f5a0fc34cc1af16a1cdee98ffb20c31f5cd61d6ab07201858f4287c938d";
-  const ETH = "0x049d36570d4e46f48e99674bd3fcc84644ddd6b96f7c741b1562b82f9e004dc7";
-  const nonce = await p.getNonceForAddress(ACCOUNT_ADDRESS).catch((e) => `error: ${trimError(e)}`);
+  const target = process.argv[3] || ACCOUNT_ADDRESS;
+  const nonce = await p.getNonceForAddress(target).catch((e) => `error: ${trimError(e)}`);
   const strkBal = await p
-    .callContract({ contractAddress: STRK, entrypoint: "balanceOf", calldata: [ACCOUNT_ADDRESS] })
+    .callContract({ contractAddress: STRK_TOKEN, entrypoint: "balanceOf", calldata: [target] })
     .catch((e) => [`error: ${trimError(e)}`]);
   const ethBal = await p
-    .callContract({ contractAddress: ETH, entrypoint: "balanceOf", calldata: [ACCOUNT_ADDRESS] })
+    .callContract({ contractAddress: ETH_TOKEN, entrypoint: "balanceOf", calldata: [target] })
     .catch((e) => [`error: ${trimError(e)}`]);
   console.log("rpc:", RPC_URL);
-  console.log("account:", ACCOUNT_ADDRESS);
+  console.log("address:", target);
   console.log("nonce:", nonce);
   console.log("STRK balance (low,high):", strkBal[0], strkBal[1]);
   console.log("ETH balance (low,high):", ethBal[0], ethBal[1]);
+}
+
+/**
+ * fund-contract <tokenAddress> <amountWei> — transfer real ERC20 value from
+ * the operating account to PROVA_PASS_CONTRACT_ADDRESS so the contract can
+ * actually pay out reward_amount on claim_with_prova_pass. Additive: no
+ * redeploy, uses the IERC20.transfer path already embedded in the deployed
+ * contract's claim function.
+ */
+async function cmdFundContract() {
+  const contractAddress = requireEnv("PROVA_PASS_CONTRACT_ADDRESS");
+  const [tokenAddress, amountWei] = process.argv.slice(3);
+  if (!tokenAddress || !amountWei) {
+    throw new Error("usage: fund-contract <tokenAddress> <amountWei>");
+  }
+  const acc = account();
+  const p = provider();
+  const call = {
+    contractAddress: tokenAddress,
+    entrypoint: "transfer",
+    calldata: CallData.compile({ recipient: contractAddress, amount: cairo.uint256(BigInt(amountWei)) }),
+  };
+  console.log(`Funding ProvaPass (${contractAddress}) with ${amountWei} of ${tokenAddress}...`);
+  const { transaction_hash } = await acc.execute(call);
+  await p.waitForTransaction(transaction_hash);
+  console.log("fund-contract tx:", transaction_hash);
 }
 
 async function cmdPoolAbi() {
@@ -351,6 +384,7 @@ const handlers = {
   "get-campaign": cmdGetCampaign,
   "pool-abi": cmdPoolAbi,
   "pool-register": () => cmdPoolRegisterViewingKey({ dryRun: process.argv[3] !== "submit" }),
+  "fund-contract": cmdFundContract,
 };
 const handler = handlers[action];
 if (!handler) {

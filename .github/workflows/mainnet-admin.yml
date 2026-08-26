@@ -18,6 +18,7 @@ on:
           - get-campaign
           - pool-abi
           - pool-register
+          - fund-contract
       arg1:
         description: "create-campaign: name | claim: campaignId"
         required: false
