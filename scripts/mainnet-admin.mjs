@@ -122,6 +122,16 @@ async function cmdBalance() {
   console.log("ETH balance (low,high):", ethBal[0], ethBal[1]);
 }
 
+async function cmdPoolAbi() {
+  const p = provider();
+  const POOL = "0x040337b1af3c663e86e333bab5a4b28da8d4652a15a69beee2b677776ffe812a";
+  const cls = await p.getClassAt(POOL);
+  const externals = (cls.abi ?? []).filter(
+    (e) => e.type === "function" || e.type === "interface" || e.type === "struct" || e.type === "enum"
+  );
+  console.log(JSON.stringify(externals, null, 2));
+}
+
 async function cmdCheckClass() {
   const p = provider();
   const candidates = process.argv.slice(3).filter(Boolean);
@@ -262,6 +272,7 @@ const handlers = {
   "check-owner": cmdCheckOwner,
   "check-class": cmdCheckClass,
   "get-campaign": cmdGetCampaign,
+  "pool-abi": cmdPoolAbi,
 };
 const handler = handlers[action];
 if (!handler) {
