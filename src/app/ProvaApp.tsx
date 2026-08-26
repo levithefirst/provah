@@ -29,7 +29,7 @@ type LocalPass = {
 const LOCAL_PASSES_KEY = "prova_local_passes_v1";
 
 function short(addr: string | null | undefined) {
-  if (!addr) return "—";
+  if (!addr) return "none";
   return addr.slice(0, 6) + "…" + addr.slice(-4);
 }
 
@@ -41,9 +41,9 @@ function formatStrk(amountWei: string): string {
 function predicateLabel(c: Campaign): string {
   switch (c.predicate_type) {
     case "balance_threshold":
-      return `Hold ≥ ${formatStrk(c.predicate_min_amount)} right now — no minimum holding period`;
+      return `Hold ≥ ${formatStrk(c.predicate_min_amount)} right now, no minimum holding period`;
     case "deposit_count":
-      return `Make ≥ ${c.predicate_min_amount} separate deposit(s) into the pool — activity, not balance`;
+      return `Make ≥ ${c.predicate_min_amount} separate deposit(s) into the pool (counts activity, not balance)`;
     case "held_since":
     default:
       return `Hold ≥ ${formatStrk(c.predicate_min_amount)} for ≥ ${c.predicate_min_days} days`;
@@ -76,7 +76,7 @@ function claimKindTag(kind: string): string {
 
 function rewardLabel(c: Campaign): string | null {
   if (c.claim_kind !== "reward_token" || BigInt(c.reward_amount || "0") === BigInt(0)) return null;
-  return `Redeeming pays ${formatStrk(c.reward_amount)} to the claiming wallet — a real transfer, not just a record.`;
+  return `Redeeming pays ${formatStrk(c.reward_amount)} to the claiming wallet: a real transfer, not just a record.`;
 }
 
 function expiryLabel(c: Campaign): string {
@@ -161,7 +161,7 @@ function CapabilityFlow({
     <div className="rounded-xl border border-neutral-800 bg-neutral-950/50 p-5">
       <p className="text-center text-base font-medium mb-4">
         🔒 Private balance <span className="text-neutral-500">turns into</span> 🎫 a bearer capability{" "}
-        <span className="text-neutral-500">— redeemed by</span> 🔓 any wallet, unlinked.
+        <span className="text-neutral-500">, redeemed by</span> 🔓 any wallet, unlinked.
       </p>
       <div className="flex items-center justify-center gap-1 sm:gap-3 overflow-x-auto">
         <div className={nodeClass(stage === "wallet-a", reached("wallet-a"))}>
@@ -183,7 +183,7 @@ function CapabilityFlow({
         </div>
       </div>
       <p className="mt-4 text-center text-xs text-neutral-500">
-        No on-chain link, no shared address, no Prova-stored mapping between A and B — the pass
+        No on-chain link, no shared address, no Prova-stored mapping between A and B. The pass
         itself is the only thing that crosses between them.
       </p>
     </div>
@@ -292,7 +292,7 @@ export default function ProvaApp() {
   async function handleClaim() {
     if (!campaign || !pass || !claimWallet) return;
     setBusy(true);
-    setStatus("Submitting claim on-chain (gasless — Prova relays it)…");
+    setStatus("Submitting claim on-chain (gasless: Prova relays it)…");
     try {
       const res = await fetch("/api/claim", {
         method: "POST",
@@ -304,7 +304,7 @@ export default function ProvaApp() {
         setStatus(`Claim failed: ${data.error}`);
       } else {
         setClaimTx(data.txHash);
-        setStatus("Claimed. The nullifier is now consumed — this pass cannot be reused.");
+        setStatus("Claimed. The nullifier is now consumed, this pass cannot be reused.");
       }
     } catch {
       setStatus("Failed to reach Prova.");
@@ -345,7 +345,7 @@ export default function ProvaApp() {
         setRedeemStatus(`Claim failed: ${data.error}`);
       } else {
         setRedeemTx(data.txHash);
-        setRedeemStatus("Claimed. This pass token is now worthless to anyone else — the nullifier is consumed.");
+        setRedeemStatus("Claimed. This pass token is now worthless to anyone else, the nullifier is consumed.");
       }
     } catch {
       setRedeemStatus("Failed to reach Prova.");
@@ -371,7 +371,7 @@ export default function ProvaApp() {
           {campaigns.length === 0 && <option value="">No campaigns yet</option>}
           {campaigns.map((c) => (
             <option key={c.id} value={c.id}>
-              {c.name} — {predicateTypeTag(c.predicate_type)}
+              {c.name} ({predicateTypeTag(c.predicate_type)})
             </option>
           ))}
         </select>
@@ -416,7 +416,7 @@ export default function ProvaApp() {
         <h2 className="text-lg font-medium">2. Connect the wallet with qualifying pool activity, generate a pass</h2>
         <p className="text-xs text-neutral-500">
           Prova checks this wallet&apos;s public STRK20 deposit history against the campaign&apos;s
-          predicate — it never sees or needs a private key, viewing key, or signature from it.
+          predicate. It never sees or needs a private key, viewing key, or signature from it.
         </p>
         <div className="flex gap-3 items-center">
           <button
@@ -444,7 +444,7 @@ export default function ProvaApp() {
               </p>
             )}
             <p className="rounded-md border border-amber-800 bg-amber-500/10 px-2 py-1.5 text-xs text-amber-300">
-              ⚠️ This is a pure bearer token, by design — anyone holding the raw text below can
+              ⚠️ This is a pure bearer token, by design. Anyone holding the raw text below can
               redeem it to a destination wallet of <em>their</em> choosing. Prova does not support
               locking a pass to one recipient. Treat it like cash: keep it secret until you hand it
               off or redeem it yourself.
@@ -468,7 +468,7 @@ export default function ProvaApp() {
         </div>
         {proverWallet && claimWallet && proverWallet === claimWallet && (
           <p className="text-amber-400 text-sm">
-            That&apos;s the same wallet — connect a genuinely different one to demonstrate unlinkability.
+            That&apos;s the same wallet. Connect a genuinely different one to demonstrate unlinkability.
           </p>
         )}
         <button
@@ -503,7 +503,7 @@ export default function ProvaApp() {
         <section className="flex flex-col gap-3 rounded-3xl border border-neutral-800 bg-neutral-900/40 p-6 sm:p-8">
           <h2 className="text-lg font-medium">Your passes (this device)</h2>
           <p className="text-sm text-neutral-500">
-            Passes are bearer capabilities — Prova has no account system and cannot list &quot;your&quot;
+            Passes are bearer capabilities. Prova has no account system and cannot list &quot;your&quot;
             passes server-side without linking them to you, which defeats the point. This list is saved
             only in this browser.
           </p>
@@ -524,8 +524,8 @@ export default function ProvaApp() {
       <section className="flex flex-col gap-3 rounded-3xl border border-neutral-800 bg-neutral-900/40 p-6 sm:p-8">
         <h2 className="text-lg font-medium">Redeem a pass someone gave you</h2>
         <p className="text-sm text-neutral-500">
-          A Prova Pass is a bearer token. Paste one below — from a friend, a Discord DM, a QR code,
-          anywhere — and claim it from any wallet, without ever having generated it yourself.
+          A Prova Pass is a bearer token. Paste one below (from a friend, a Discord DM, a QR code,
+          anywhere) and claim it from any wallet, without ever having generated it yourself.
         </p>
         <textarea
           className="bg-neutral-900 border border-neutral-700 rounded-md px-3 py-2 font-mono text-xs"
@@ -582,7 +582,7 @@ function PassTokenExport({ pass }: { pass: LocalPass }) {
   return (
     <div className="flex flex-col gap-1">
       <p className="text-xs text-neutral-500">
-        Share this token with anyone — they can redeem it from any wallet, no connection to this
+        Share this token with anyone. They can redeem it from any wallet, no connection to this
         browser or wallet A required.
       </p>
       <div className="flex gap-2 items-start">

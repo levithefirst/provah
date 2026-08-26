@@ -27,8 +27,8 @@ export default function Home() {
                 This is a real, working app
               </h2>
               <p className="mx-auto mt-4 max-w-xl text-neutral-400">
-                Three live campaigns, real mainnet transactions, a gas-sponsored claim from any
-                wallet. Try it below — no setup required.
+                Four live campaigns, real mainnet transactions, a gas-sponsored claim from any
+                wallet. Try it below, no setup required.
               </p>
             </div>
             <ProvaApp />

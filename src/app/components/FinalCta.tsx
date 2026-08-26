@@ -6,7 +6,7 @@ export default function FinalCta() {
           Private state in. Portable capability out.
         </h2>
         <p className="mt-4 text-neutral-600">
-          Consumed exactly once, from anywhere. Try the whole flow yourself — it takes under two
+          Consumed exactly once, from anywhere. Try the whole flow yourself: it takes under two
           minutes and it&apos;s real mainnet, not a testnet fork.
         </p>
         <a

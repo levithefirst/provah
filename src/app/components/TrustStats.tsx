@@ -1,6 +1,6 @@
 const STATS = [
   { value: "10", label: "Confirmed mainnet transactions" },
-  { value: "4", label: "Live campaigns — one pays a real STRK reward" },
+  { value: "4", label: "Live campaigns, one pays a real STRK reward" },
   { value: "1", label: "Contract, zero redeploys between them" },
 ];
 
@@ -37,8 +37,8 @@ export default function TrustStats() {
                 rel="noreferrer"
               >
                 0x7461…b402
-              </a>{" "}
-              — see{" "}
+              </a>
+              . See{" "}
               <a
                 className="underline underline-offset-2"
                 href="https://github.com/levithefirst/provah/blob/main/strk20.json"
@@ -51,7 +51,7 @@ export default function TrustStats() {
             </p>
             <p className="max-w-xl text-xs text-neutral-500">
               Honest note: the predicate check itself is a signed server attestation today, not a
-              client-side ZK proof — the mainnet proving service the fully trustless version needs
+              client-side ZK proof. The mainnet proving service the fully trustless version needs
               has no published endpoint. See{" "}
               <a
                 className="underline underline-offset-2"

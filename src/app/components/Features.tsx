@@ -2,12 +2,12 @@ const FEATURES = [
   {
     icon: "🧩",
     title: "Multi-predicate support",
-    body: "held_since, balance_threshold, deposit_count — pluggable predicate types, all against the same deployed contract, zero redeploys.",
+    body: "held_since, balance_threshold, deposit_count: pluggable predicate types, all against the same deployed contract, zero redeploys.",
   },
   {
     icon: "🔀",
     title: "Cross-wallet claims",
-    body: "Generate from one wallet, claim from a completely different one — funded or brand new — by design.",
+    body: "Generate from one wallet, claim from a completely different one, funded or brand new, by design.",
   },
   {
     icon: "🎟️",
@@ -17,7 +17,7 @@ const FEATURES = [
   {
     icon: "🔑",
     title: "One-time nullifiers",
-    body: "Every pass consumes a fresh nullifier on-chain. Reuse is provably impossible — verify it yourself with is_nullifier_consumed.",
+    body: "Every pass consumes a fresh nullifier on-chain. Reuse is provably impossible: verify it yourself with is_nullifier_consumed.",
   },
   {
     icon: "⛽",
@@ -27,7 +27,7 @@ const FEATURES = [
   {
     icon: "🔍",
     title: "Honest trust boundary",
-    body: "The predicate check is a signed attestation today, not yet a client-side ZK proof — and we say exactly why, with on-chain evidence.",
+    body: "The predicate check is a signed attestation today, not yet a client-side ZK proof, and we say exactly why, with on-chain evidence.",
   },
 ];
 

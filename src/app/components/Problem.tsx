@@ -10,9 +10,9 @@ export default function Problem() {
             Private state is a dead end, on its own.
           </h2>
           <p className="mt-5 text-neutral-600">
-            STRK20 makes your Starknet holdings private — shielded balances, unlinkable transfers.
+            STRK20 makes your Starknet holdings private: shielded balances, unlinkable transfers.
             But privacy that can only sit there isn&apos;t useful. The moment you try to{" "}
-            <em>do</em> something with it — claim a reward, prove you qualify, unlock access — you
+            <em>do</em> something with it, claim a reward, prove you qualify, unlock access, you
             either reveal the wallet that holds the balance, or build a bespoke proof system for
             that one use case. Neither scales past a single demo.
           </p>

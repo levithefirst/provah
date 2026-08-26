@@ -13,7 +13,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Prova Pass — private state, portable capability",
+  title: "Prova Pass: private state, portable capability",
   description:
     "Prove eligibility from your private STRK20 holdings, claim from a completely different wallet. No link between them, on-chain or off.",
 };

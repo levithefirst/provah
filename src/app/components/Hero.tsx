@@ -38,7 +38,7 @@ function HeroFlow() {
         ))}
       </div>
       <p className="mt-6 text-center text-sm text-neutral-500">
-        No on-chain link, no shared address, no Prova-stored mapping between A and B — the pass
+        No on-chain link, no shared address, no Prova-stored mapping between A and B: the pass
         itself is the only thing that crosses between them.
       </p>
     </div>
@@ -64,7 +64,7 @@ export default function Hero() {
 
         <p className="mt-6 max-w-xl text-lg text-neutral-600">
           Prove something about a wallet&apos;s STRK20 pool activity. Get a one-time bearer
-          capability — one that can carry a real reward, not just a record. Redeem it from any
+          capability, one that can carry a real reward, not just a record. Redeem it from any
           wallet on earth, with nothing on-chain linking the two.
         </p>
 

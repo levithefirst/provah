@@ -2,17 +2,17 @@ const STEPS = [
   {
     n: "01",
     title: "Prove privately",
-    body: "Connect the wallet that holds your STRK20 position. Prova checks a predicate — held for N days, above a threshold, deposit count — against public pool data. Your private note state is never touched.",
+    body: "Connect the wallet that holds your STRK20 position. Prova checks a predicate (held for N days, above a threshold, deposit count) against public pool data. Your private note state is never touched.",
   },
   {
     n: "02",
     title: "Get a one-time capability",
-    body: "Prova signs a capability bound to a fresh nullifier and hands it to you as a bearer token — not to your wallet. It carries no wallet binding until someone redeems it.",
+    body: "Prova signs a capability bound to a fresh nullifier and hands it to you as a bearer token, not to your wallet. It carries no wallet binding until someone redeems it.",
   },
   {
     n: "03",
     title: "Redeem from anywhere",
-    body: "Hand the token to any wallet — brand new, unfunded, or someone else entirely. They claim it, gas-sponsored. The chain records only (campaign, nullifier, recipient) — nothing about you.",
+    body: "Hand the token to any wallet: brand new, unfunded, or someone else entirely. They claim it, gas-sponsored. The chain records only (campaign, nullifier, recipient), nothing about you.",
   },
 ];
 
@@ -28,8 +28,8 @@ export default function HowItWorks() {
             One primitive, three steps
           </h2>
           <p className="mt-4 text-neutral-600">
-            The same flow works for any predicate you can evaluate against public chain data —
-            this is a capability layer, not a single campaign.
+            The same flow works for any predicate you can evaluate against public chain data.
+            This is a capability layer, not a single campaign.
           </p>
         </div>
 
@@ -44,7 +44,7 @@ export default function HowItWorks() {
         </div>
 
         <div className="mt-10 rounded-2xl border border-indigo-100 bg-indigo-50 px-6 py-5 text-center text-sm font-medium text-indigo-700">
-          No on-chain link, ever — the pass is the only thing that crosses between the qualifying
+          No on-chain link, ever: the pass is the only thing that crosses between the qualifying
           wallet and the claiming wallet.
         </div>
       </div>
