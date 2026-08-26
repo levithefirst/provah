@@ -45,8 +45,9 @@ export default function ProvaApp() {
       .then((d) => {
         setCampaigns(d.campaigns ?? []);
         if (d.campaigns?.[0]) setSelected(d.campaigns[0].id);
+        if (d.error) setStatus(`Could not load campaigns: ${d.error}`);
       })
-      .catch(() => setStatus("Could not load campaigns."));
+      .catch((err) => setStatus(`Could not load campaigns: ${err instanceof Error ? err.message : String(err)}`));
   }, []);
 
   const campaign = campaigns.find((c) => c.id === selected);
