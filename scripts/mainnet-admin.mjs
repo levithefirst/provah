@@ -14,22 +14,15 @@
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
-import { Account, RpcProvider, CallData, Contract, cairo, hash, ec, constants, Signer } from "starknet";
+import { Account, RpcProvider, CallData, Contract, cairo, hash, ec, constants } from "starknet";
 
 /**
- * The operating wallet is an Argent account (confirmed via its class hash in
- * a live "invalid signature length" revert). Argent's current account
- * contract expects a SignerSignature-wrapped format — [signer_type=Starknet,
- * pubkey, r, s] — not the plain [r, s] starknet.js's default Signer produces.
- * See argentlabs/argent-contracts-starknet/docs/signers_and_signatures.md.
+ * Standard OpenZeppelin single-signer account (no guardian), confirmed
+ * declared on Starknet mainnet via the check-class action. Constructor
+ * takes a single `public_key: felt252` and validates plain [r, s]
+ * signatures — no Argent-style SignerSignature wrapping needed.
  */
-class ArgentSigner extends Signer {
-  async signRaw(msgHash) {
-    const sig = ec.starkCurve.sign(msgHash, this.pk);
-    const pubkey = ec.starkCurve.getStarkKey(this.pk);
-    return ["0x0", pubkey, "0x" + sig.r.toString(16), "0x" + sig.s.toString(16)];
-  }
-}
+const OZ_ACCOUNT_CLASS_HASH = "0x05b4b537eaa2399e3aa99c4e2e0208ebd6c71bc1467938cd52c798c601e43564";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
@@ -55,10 +48,45 @@ function account() {
   return new Account({
     provider: provider(),
     address: ACCOUNT_ADDRESS,
-    signer: new ArgentSigner(PRIVATE_KEY),
+    signer: PRIVATE_KEY,
     cairoVersion: "1",
     chainId: constants.StarknetChainId.SN_MAIN,
   });
+}
+
+async function cmdDeployAccount() {
+  const p = provider();
+  const publicKey = ec.starkCurve.getStarkKey(PRIVATE_KEY);
+  console.log("derived pubkey:", publicKey);
+
+  const chainId = await p.getChainId();
+  if (chainId !== "0x534e5f4d41494e") {
+    throw new Error(`refusing to deploy: RPC reports chainId ${chainId}, expected mainnet 0x534e5f4d41494e`);
+  }
+
+  const constructorCalldata = CallData.compile({ public_key: publicKey });
+  const computedAddress = hash.calculateContractAddressFromHash(
+    publicKey,
+    OZ_ACCOUNT_CLASS_HASH,
+    constructorCalldata,
+    0
+  );
+  console.log("computed counterfactual address:", computedAddress);
+  if (BigInt(computedAddress) !== BigInt(ACCOUNT_ADDRESS)) {
+    throw new Error(
+      `computed address ${computedAddress} does not match STARKNET_ACCOUNT_ADDRESS ${ACCOUNT_ADDRESS}`
+    );
+  }
+
+  const acc = account();
+  const { transaction_hash, contract_address } = await acc.deployAccount({
+    classHash: OZ_ACCOUNT_CLASS_HASH,
+    constructorCalldata,
+    addressSalt: publicKey,
+  });
+  await p.waitForTransaction(transaction_hash);
+  console.log("deploy_account tx:", transaction_hash);
+  console.log("account address:", contract_address);
 }
 
 function attesterPublicKey() {
@@ -208,6 +236,7 @@ async function cmdClaim() {
 
 const action = process.argv[2];
 const handlers = {
+  "deploy-account": cmdDeployAccount,
   deploy: cmdDeploy,
   "create-campaign": cmdCreateCampaign,
   claim: cmdClaim,

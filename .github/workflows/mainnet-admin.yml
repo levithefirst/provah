@@ -8,6 +8,7 @@ on:
         required: true
         type: choice
         options:
+          - deploy-account
           - deploy
           - create-campaign
           - claim
