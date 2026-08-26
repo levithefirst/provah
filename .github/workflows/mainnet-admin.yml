@@ -15,6 +15,7 @@ on:
           - balance
           - check-owner
           - check-class
+          - get-campaign
       arg1:
         description: "create-campaign: name | claim: campaignId"
         required: false

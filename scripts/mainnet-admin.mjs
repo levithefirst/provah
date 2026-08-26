@@ -139,6 +139,17 @@ async function cmdCheckClass() {
   }
 }
 
+async function cmdGetCampaign() {
+  const contractAddress = requireEnv("PROVA_PASS_CONTRACT_ADDRESS");
+  const campaignId = process.argv[3];
+  if (!campaignId) throw new Error("usage: get-campaign <campaignId>");
+  const p = provider();
+  const abi = JSON.parse(readFileSync(join(__dirname, "../src/contracts/prova_pass.sierra.json"), "utf-8")).abi;
+  const contract = new Contract({ abi, address: contractAddress, providerOrAccount: p });
+  const result = await contract.call("get_campaign", [campaignId]);
+  console.log("get_campaign result:", JSON.stringify(result, (_, v) => (typeof v === "bigint" ? "0x" + v.toString(16) : v)));
+}
+
 async function cmdCheckOwner() {
   const p = provider();
   const derivedPubkey = ec.starkCurve.getStarkKey(PRIVATE_KEY);
@@ -243,6 +254,7 @@ const handlers = {
   balance: cmdBalance,
   "check-owner": cmdCheckOwner,
   "check-class": cmdCheckClass,
+  "get-campaign": cmdGetCampaign,
 };
 const handler = handlers[action];
 if (!handler) {
