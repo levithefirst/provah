@@ -1,5 +1,6 @@
 {
   "project": "Prova Pass",
+  "tagline": "A private-state capability layer: prove something about STRK20 holdings you never reveal, redeem it from any wallet.",
   "repo": "https://github.com/levithefirst/provah",
   "network": "mainnet",
   "chain_id": "SN_MAIN",
@@ -23,13 +24,25 @@
       "type": "invoke",
       "entrypoint": "create_campaign",
       "hash": "0x758de909a13df099cd72a1ef843217805d04ab761ab57e2bcd4c0f924c126e6",
-      "description": "Create the 'STRK Loyalty Drop' campaign (predicate: hold >= 1 STRK for >= 7 days) on ProvaPass."
+      "description": "Create 'STRK Loyalty Drop' (predicate: held_since — held >= 1 STRK for >= 7 days)."
     },
     {
       "type": "invoke",
       "entrypoint": "claim_with_prova_pass",
       "hash": "0x5ebf464f06bfe864f2ee875a4b8a84ab8032b31ced539300424067ae14f9dce",
       "description": "Claim a Prova Pass from a wallet unrelated to the one that satisfied the predicate, consuming the nullifier one-time on-chain."
+    },
+    {
+      "type": "invoke",
+      "entrypoint": "create_campaign",
+      "hash": "0x41c16869dcd1f3781e839f44b9ea86b867d872f4177e7790fee631d957de9b3",
+      "description": "Create 'STRK Holder Badge' (predicate: balance_threshold — hold >= 1 STRK right now, no minimum holding period). Second live campaign, proving the platform is multi-predicate, not single-purpose."
+    },
+    {
+      "type": "invoke",
+      "entrypoint": "create_campaign",
+      "hash": "0x12aa67bcb97507d402cbe8a7308fd9a6c7ad3a9088227e4a35ad96603284496",
+      "description": "Create 'Active Depositor' (predicate: deposit_count — >= 1 deposit into the pool). Third live campaign, a distinct activity-based predicate type."
     }
   ],
   "contracts": [
@@ -43,6 +56,23 @@
       "address": "0x74614e0cd54af7e59987a5d74fdd028209feff01fc20eca2934fe80b94db402",
       "class_hash": "0x7adfeaf0d075cda33b3128fd9cc255e34e7b778e907cbb64216d76bd7cf89e6",
       "network": "mainnet"
+    }
+  ],
+  "campaigns": [
+    {
+      "id": "0x2df11a90c5a246beb0c7b59cc13e3d73e3c7ae1de5a00f9d71bee9fb2720582",
+      "name": "STRK Loyalty Drop",
+      "predicate_type": "held_since"
+    },
+    {
+      "id": "0x20b46e7e999cbcc1dc3b2d30368977a2782270c7434e3ef35ce18fc755188f1",
+      "name": "STRK Holder Badge",
+      "predicate_type": "balance_threshold"
+    },
+    {
+      "id": "0x3d1270c552a597e11aaec052b7c8791a76fbb77ed946f36ffa7ba73325d35c3",
+      "name": "Active Depositor",
+      "predicate_type": "deposit_count"
     }
   ],
   "demo_video": "",
