@@ -196,7 +196,7 @@ async function cmdPoolRegisterViewingKey({ dryRun }) {
     EmitViewingKeySet: {
       user_addr: ACCOUNT_ADDRESS,
       public_key: publicKey,
-      enc_private_key: { salt: "0x0", enc_token: "0x0" },
+      enc_private_key: "0x0",
     },
     EmitWithdrawal: undefined,
     EmitDeposit: undefined,
