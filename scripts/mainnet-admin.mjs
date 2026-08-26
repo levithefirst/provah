@@ -94,6 +94,18 @@ async function cmdBalance() {
   console.log("ETH balance (low,high):", ethBal[0], ethBal[1]);
 }
 
+async function cmdCheckClass() {
+  const p = provider();
+  const candidates = process.argv.slice(3).filter(Boolean);
+  for (const classHash of candidates) {
+    const result = await p
+      .getClass(classHash)
+      .then(() => "DECLARED")
+      .catch((e) => `not found: ${trimError(e)}`);
+    console.log(classHash, "->", result);
+  }
+}
+
 async function cmdCheckOwner() {
   const p = provider();
   const derivedPubkey = ec.starkCurve.getStarkKey(PRIVATE_KEY);
@@ -196,6 +208,7 @@ const handlers = {
   claim: cmdClaim,
   balance: cmdBalance,
   "check-owner": cmdCheckOwner,
+  "check-class": cmdCheckClass,
 };
 const handler = handlers[action];
 if (!handler) {
