@@ -17,6 +17,7 @@ on:
           - check-class
           - get-campaign
           - pool-abi
+          - pool-register
       arg1:
         description: "create-campaign: name | claim: campaignId"
         required: false

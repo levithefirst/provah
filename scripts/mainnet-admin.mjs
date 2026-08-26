@@ -14,7 +14,19 @@
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
-import { Account, RpcProvider, CallData, Contract, cairo, hash, ec, constants } from "starknet";
+import {
+  Account,
+  RpcProvider,
+  CallData,
+  Contract,
+  cairo,
+  hash,
+  ec,
+  constants,
+  CairoCustomEnum,
+  CairoOption,
+  CairoOptionVariant,
+} from "starknet";
 
 /**
  * Standard OpenZeppelin single-signer account (no guardian), confirmed
@@ -130,6 +142,74 @@ async function cmdPoolAbi() {
     (e) => e.type === "function" || e.type === "interface" || e.type === "struct" || e.type === "enum"
   );
   console.log(JSON.stringify(externals, null, 2));
+}
+
+const POOL_ADDRESS = "0x040337b1af3c663e86e333bab5a4b28da8d4652a15a69beee2b677776ffe812a";
+
+/**
+ * Attempt a real STRK20 pool-touching mainnet transaction: register a
+ * viewing key. Per the hackathon's docs/MAINNET-DAY-0.md, this is one of
+ * the two actions ("registering a viewing key, and shielding") documented
+ * as needing no proving service at all — a plain call to the pool's
+ * external apply_actions(actions, screening) with a ServerAction that
+ * needs no ZK proof, submitted directly by an ordinary account. Deposits
+ * are the other such action, but additionally require a compliance
+ * provider's screening signature over the deposit, which we have no way
+ * to obtain — see STATUS.md.
+ *
+ * The pubkey derivation follows the doc's own snippet: sign a fixed
+ * domain message, Poseidon-fold the signature, reduce into curve order.
+ * The resulting scalar's own EC public key is registered. The optional
+ * encrypted-backup field (enc_private_key) has no specified encoding in
+ * the docs; we submit an explicit "no backup provided" zero value rather
+ * than fabricate a bogus encryption scheme.
+ */
+async function cmdPoolRegisterViewingKey({ dryRun }) {
+  const p = provider();
+  const acc = account();
+
+  const chainId = await p.getChainId();
+  if (chainId !== "0x534e5f4d41494e") {
+    throw new Error(`refusing to submit: RPC reports chainId ${chainId}, expected mainnet`);
+  }
+
+  const cls = await p.getClassAt(POOL_ADDRESS);
+  const poolAbi = cls.abi;
+
+  const messageHash = hash.starknetKeccak(`${chainId}:${POOL_ADDRESS}`);
+  const sig = ec.starkCurve.sign(BigInt(messageHash).toString(16).padStart(64, "0"), PRIVATE_KEY);
+  const folded = BigInt(hash.computePoseidonHashOnElements([sig.r.toString(), sig.s.toString()]));
+  const reduced = folded % ec.starkCurve.CURVE.n;
+  const publicKey = ec.starkCurve.getStarkKey(reduced.toString(16).padStart(64, "0"));
+
+  console.log("derived viewing pubkey:", publicKey);
+
+  const contract = new Contract({ abi: poolAbi, address: POOL_ADDRESS, providerOrAccount: acc });
+
+  const action = new CairoCustomEnum({
+    EmitViewingKeySet: {
+      user_addr: ACCOUNT_ADDRESS,
+      public_key: publicKey,
+      enc_private_key: { salt: "0x0", enc_token: "0x0" },
+    },
+  });
+  const screening = new CairoOption(CairoOptionVariant.None);
+
+  const call = contract.populate("apply_actions", [[action], screening]);
+
+  console.log("Estimating fee (dry run, no gas spent if this throws)...");
+  const estimate = await acc.estimateFee(call);
+  console.log("fee estimate succeeded:", estimate.overall_fee?.toString?.() ?? estimate.suggestedMaxFee?.toString?.());
+
+  if (dryRun) {
+    console.log("Dry run only (arg1=dry-run) — not submitting. Re-run with arg1=submit to send it for real.");
+    return;
+  }
+
+  console.log("Submitting apply_actions(EmitViewingKeySet) to the live STRK20 pool...");
+  const { transaction_hash } = await acc.execute(call);
+  await p.waitForTransaction(transaction_hash);
+  console.log("pool register tx:", transaction_hash);
 }
 
 async function cmdCheckClass() {
@@ -273,6 +353,7 @@ const handlers = {
   "check-class": cmdCheckClass,
   "get-campaign": cmdGetCampaign,
   "pool-abi": cmdPoolAbi,
+  "pool-register": () => cmdPoolRegisterViewingKey({ dryRun: process.argv[3] !== "submit" }),
 };
 const handler = handlers[action];
 if (!handler) {
