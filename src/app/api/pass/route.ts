@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
-import { evaluateHeldSinceDays } from "@/lib/predicate";
+import { evaluatePredicate } from "@/lib/predicate";
 import { pedersen, signAttestation, deriveNullifier } from "@/lib/attestation";
 
 /**
@@ -29,7 +29,8 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ ok: false, error: "campaign not active" }, { status: 400 });
     }
 
-    const { eligible, evidence } = await evaluateHeldSinceDays(
+    const { eligible, evidence } = await evaluatePredicate(
+      campaign.predicate_type,
       proverAddress,
       campaign.predicate_asset,
       BigInt(campaign.predicate_min_amount),

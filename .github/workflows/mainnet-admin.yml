@@ -37,6 +37,9 @@ on:
       arg7:
         description: "create-campaign: expiryDays"
         required: false
+      arg8:
+        description: "create-campaign: predicateType (held_since | balance_threshold | deposit_count)"
+        required: false
       rpcUrl:
         description: "Override STARKNET_RPC_URL for this run only (diagnostics)"
         required: false
@@ -64,4 +67,5 @@ jobs:
         run: |
           node scripts/mainnet-admin.mjs "${{ inputs.action }}" \
             "${{ inputs.arg1 }}" "${{ inputs.arg2 }}" "${{ inputs.arg3 }}" \
-            "${{ inputs.arg4 }}" "${{ inputs.arg5 }}" "${{ inputs.arg6 }}" "${{ inputs.arg7 }}"
+            "${{ inputs.arg4 }}" "${{ inputs.arg5 }}" "${{ inputs.arg6 }}" "${{ inputs.arg7 }}" \
+            "${{ inputs.arg8 }}"

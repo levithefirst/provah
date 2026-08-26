@@ -20,8 +20,10 @@ export async function GET(req: NextRequest) {
     const description =
       sp.get("description") ??
       "Held >= X STRK for >= N days in the private pool? Claim from any wallet.";
+    const predicateType = sp.get("predicateType") ?? "held_since"; // held_since | balance_threshold | deposit_count
+    const claimKind = sp.get("claimKind") ?? "capability"; // capability | allowlist | reward_token
     const predicateAsset = sp.get("asset") ?? "0x04718f5a0fc34cc1af16a1cdee98ffb20c31f5cd61d6ab07201858f4287c938d";
-    const minAmount = BigInt(sp.get("minAmount") ?? "1000000000000000000"); // 1 STRK default
+    const minAmount = BigInt(sp.get("minAmount") ?? "1000000000000000000"); // 1 STRK default (or min count, for deposit_count)
     const minDays = Number(sp.get("minDays") ?? "7");
     const rewardToken = sp.get("rewardToken") ?? predicateAsset;
     const rewardAmount = BigInt(sp.get("rewardAmount") ?? "0");
@@ -33,8 +35,8 @@ export async function GET(req: NextRequest) {
     const predicateHash =
       "0x" +
       pedersen(
-        pedersen(BigInt(num.toHex(predicateAsset)), minAmount),
-        BigInt(minDays)
+        pedersen(pedersen(BigInt(num.toHex(predicateAsset)), minAmount), BigInt(minDays)),
+        BigInt(num.toHex(hash.starknetKeccak(predicateType)))
       ).toString(16);
     const expiry = Math.floor(Date.now() / 1000) + expiryDays * 86400;
 
@@ -52,12 +54,13 @@ export async function GET(req: NextRequest) {
     await provider().waitForTransaction(transaction_hash);
 
     await db().query(
-      `INSERT INTO campaigns (id, name, description, predicate_asset, predicate_min_amount, predicate_min_days, predicate_hash, reward_token, reward_amount, expiry, contract_address, creator_address, create_tx_hash)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)`,
+      `INSERT INTO campaigns (id, name, description, predicate_type, predicate_asset, predicate_min_amount, predicate_min_days, predicate_hash, reward_token, reward_amount, expiry, contract_address, creator_address, create_tx_hash, claim_kind)
+       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)`,
       [
         campaignId,
         name,
         description,
+        predicateType,
         predicateAsset,
         minAmount.toString(),
         minDays,
@@ -68,6 +71,7 @@ export async function GET(req: NextRequest) {
         PROVA_PASS_CONTRACT_ADDRESS,
         account.address,
         transaction_hash,
+        claimKind,
       ]
     );
     await db().query(`INSERT INTO mainnet_activity_log (kind, tx_hash, detail) VALUES ($1,$2,$3)`, [

@@ -199,7 +199,8 @@ async function cmdDeploy() {
 
 async function cmdCreateCampaign() {
   const contractAddress = requireEnv("PROVA_PASS_CONTRACT_ADDRESS");
-  const [name, asset, minAmount, minDays, rewardToken, rewardAmount, expiryDays] = process.argv.slice(3);
+  const [name, asset, minAmount, minDays, rewardToken, rewardAmount, expiryDays, predicateType] =
+    process.argv.slice(3);
 
   const abi = JSON.parse(readFileSync(join(__dirname, "../src/contracts/prova_pass.sierra.json"), "utf-8")).abi;
   const acc = account();
@@ -208,10 +209,14 @@ async function cmdCreateCampaign() {
 
   const campaignId = "0x" + hash.starknetKeccak((name ?? "STRK Loyalty Drop") + Date.now()).toString(16);
   const predicateHash =
-    "0x" + pedersen(pedersen(BigInt(asset), BigInt(minAmount)), BigInt(minDays ?? "7")).toString(16);
+    "0x" +
+    pedersen(
+      pedersen(pedersen(BigInt(asset), BigInt(minAmount)), BigInt(minDays ?? "7")),
+      BigInt(hash.starknetKeccak(predicateType ?? "held_since"))
+    ).toString(16);
   const expiry = Math.floor(Date.now() / 1000) + Number(expiryDays ?? "90") * 86400;
 
-  console.log("Creating campaign", campaignId);
+  console.log("Creating campaign", campaignId, "type:", predicateType ?? "held_since");
   const call = contract.populate("create_campaign", [
     campaignId,
     predicateHash,
@@ -223,6 +228,8 @@ async function cmdCreateCampaign() {
   await p.waitForTransaction(transaction_hash);
   console.log("create_campaign tx:", transaction_hash);
   console.log("campaign_id:", campaignId);
+  console.log("predicate_hash:", predicateHash);
+  console.log("expiry (unix seconds):", expiry);
 }
 
 async function cmdClaim() {

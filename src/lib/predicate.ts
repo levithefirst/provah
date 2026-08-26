@@ -76,3 +76,56 @@ export async function evaluateHeldSinceDays(
 
   return { eligible: running >= minAmount, evidence };
 }
+
+/**
+ * Balance-threshold predicate: total deposited ≥ minAmount, no holding-period
+ * requirement. Same public-data source as evaluateHeldSinceDays with the
+ * time cutoff removed (equivalent to minDays = 0).
+ */
+export async function evaluateBalanceThreshold(
+  userAddress: string,
+  tokenAddress: string,
+  minAmount: bigint
+): Promise<{ eligible: boolean; evidence: DepositRecord[] }> {
+  return evaluateHeldSinceDays(userAddress, tokenAddress, minAmount, 0);
+}
+
+/**
+ * Deposit-count predicate: number of separate deposits into the pool ≥
+ * minCount. NOTE: this counts public *deposit* events, not private
+ * note-to-note transfers — the pool does not expose the latter publicly by
+ * design (see README "What is private / what is not"), so a genuine
+ * "private transfer count" predicate is not honestly computable from public
+ * data today. This is a distinct, real predicate type (activity-based
+ * rather than balance-based) built from the same honest data source.
+ */
+export async function evaluateDepositCount(
+  userAddress: string,
+  tokenAddress: string,
+  minCount: bigint
+): Promise<{ eligible: boolean; evidence: DepositRecord[] }> {
+  const deposits = (await getDepositHistory(userAddress)).filter(
+    (d) => d.token.toLowerCase() === tokenAddress.toLowerCase()
+  );
+  return { eligible: BigInt(deposits.length) >= minCount, evidence: deposits };
+}
+
+export type PredicateType = "held_since" | "balance_threshold" | "deposit_count";
+
+export async function evaluatePredicate(
+  predicateType: string,
+  userAddress: string,
+  tokenAddress: string,
+  minAmount: bigint,
+  minDays: number
+): Promise<{ eligible: boolean; evidence: DepositRecord[] }> {
+  switch (predicateType) {
+    case "balance_threshold":
+      return evaluateBalanceThreshold(userAddress, tokenAddress, minAmount);
+    case "deposit_count":
+      return evaluateDepositCount(userAddress, tokenAddress, minAmount);
+    case "held_since":
+    default:
+      return evaluateHeldSinceDays(userAddress, tokenAddress, minAmount, minDays);
+  }
+}
