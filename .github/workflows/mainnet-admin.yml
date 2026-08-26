@@ -39,6 +39,9 @@ on:
       rpcUrl:
         description: "Override STARKNET_RPC_URL for this run only (diagnostics)"
         required: false
+      contractAddress:
+        description: "Override PROVA_PASS_CONTRACT_ADDRESS for this run only (public address, not secret)"
+        required: false
 
 jobs:
   run:
@@ -56,7 +59,7 @@ jobs:
           STARKNET_PRIVATE_KEY: ${{ secrets.STARKNET_PRIVATE_KEY }}
           PROVA_ATTESTER_PRIVATE_KEY: ${{ secrets.PROVA_ATTESTER_PRIVATE_KEY }}
           PROVA_ATTESTER_PUBLIC_KEY: ${{ secrets.PROVA_ATTESTER_PUBLIC_KEY }}
-          PROVA_PASS_CONTRACT_ADDRESS: ${{ secrets.PROVA_PASS_CONTRACT_ADDRESS }}
+          PROVA_PASS_CONTRACT_ADDRESS: ${{ inputs.contractAddress != '' && inputs.contractAddress || secrets.PROVA_PASS_CONTRACT_ADDRESS }}
         run: |
           node scripts/mainnet-admin.mjs "${{ inputs.action }}" \
             "${{ inputs.arg1 }}" "${{ inputs.arg2 }}" "${{ inputs.arg3 }}" \
