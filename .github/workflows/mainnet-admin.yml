@@ -19,6 +19,7 @@ on:
           - pool-abi
           - pool-register
           - fund-contract
+          - tx-status
       arg1:
         description: "create-campaign: name | claim: campaignId"
         required: false

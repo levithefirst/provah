@@ -165,6 +165,29 @@ async function cmdPoolAbi() {
   console.log(JSON.stringify(externals, null, 2));
 }
 
+/**
+ * tx-status <hash> — read-only receipt + event check, for verifying a claimed
+ * mainnet transaction (e.g. one supplied by a teammate) before recording it
+ * anywhere. Prints status, block, and which contracts/keys emitted events so
+ * a pool-touching claim can be confirmed rather than taken on faith.
+ */
+async function cmdTxStatus() {
+  const txHash = process.argv[3];
+  if (!txHash) throw new Error("usage: tx-status <hash>");
+  const p = provider();
+  const receipt = await p.getTransactionReceipt(txHash);
+  console.log("finality_status:", receipt.finality_status);
+  console.log("execution_status:", receipt.execution_status);
+  console.log("block_number:", receipt.block_number);
+  console.log("events:");
+  for (const ev of receipt.events ?? []) {
+    console.log("  from_address:", ev.from_address);
+    console.log("  keys:", JSON.stringify(ev.keys));
+    console.log("  data:", JSON.stringify(ev.data));
+    console.log("  ---");
+  }
+}
+
 const POOL_ADDRESS = "0x040337b1af3c663e86e333bab5a4b28da8d4652a15a69beee2b677776ffe812a";
 
 /**
@@ -383,6 +406,7 @@ const handlers = {
   "check-class": cmdCheckClass,
   "get-campaign": cmdGetCampaign,
   "pool-abi": cmdPoolAbi,
+  "tx-status": cmdTxStatus,
   "pool-register": () => cmdPoolRegisterViewingKey({ dryRun: process.argv[3] !== "submit" }),
   "fund-contract": cmdFundContract,
 };
