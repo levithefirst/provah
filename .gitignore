@@ -42,6 +42,9 @@ contracts/*/.snfoundry_cache/
 # scratch
 smoke.mjs
 
+# local-only deliverables (not meant for the branch)
+VOICEOVER.md
+
 # vercel
 .vercel
 
