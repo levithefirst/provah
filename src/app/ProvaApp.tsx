@@ -644,7 +644,7 @@ export default function ProvaApp() {
       <section className="flex flex-col gap-3 rounded-3xl border border-neutral-200 bg-white p-6 shadow-sm sm:p-8 dark:border-neutral-800 dark:bg-neutral-900/40 dark:shadow-none">
         <h2 className="text-lg font-medium">1. Pick a campaign</h2>
         <select
-          className="w-full rounded-md border border-neutral-300 bg-white px-3 py-2.5 text-neutral-900 transition-colors focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/40 sm:w-auto dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-100"
+          className="w-full rounded-md border border-neutral-300 bg-white px-3 py-2.5 text-neutral-900 transition-colors focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/40 sm:w-auto dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-100"
           value={selected}
           disabled={campaignsLoading}
           onChange={(e) => {
@@ -782,7 +782,7 @@ export default function ProvaApp() {
             type="checkbox"
             checked={lockPass}
             onChange={(e) => setLockPass(e.target.checked)}
-            className="h-4 w-4 rounded border-neutral-400 dark:border-neutral-600"
+            className="h-4 w-4 rounded border-neutral-400 accent-[#b7f34a] dark:border-neutral-600"
           />
           Lock this pass to one destination wallet (optional)
         </label>
@@ -792,7 +792,7 @@ export default function ProvaApp() {
             value={lockRecipient}
             onChange={(e) => setLockRecipient(e.target.value)}
             placeholder="0x… destination wallet address"
-            className="rounded-md border border-neutral-300 bg-white px-3 py-2 font-mono text-xs text-neutral-900 transition-colors focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/40 dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-100"
+            className="rounded-md border border-neutral-300 bg-white px-3 py-2 font-mono text-xs text-neutral-900 transition-colors focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/40 dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-100"
           />
         )}
         <button
@@ -818,7 +818,7 @@ export default function ProvaApp() {
               </p>
             )}
             {pass.boundRecipient ? (
-              <p className="flex items-start gap-1.5 rounded-md border border-indigo-300 bg-indigo-50 px-2 py-1.5 text-xs text-indigo-800 dark:border-indigo-800 dark:bg-indigo-500/10 dark:text-indigo-300">
+              <p className="flex items-start gap-1.5 rounded-md border border-accent/40 bg-accent/10 px-2 py-1.5 text-xs text-accent-ink">
                 <Lock className="mt-0.5 h-3.5 w-3.5 shrink-0" strokeWidth={1.75} /> Locked to{" "}
                 {short(pass.boundRecipient)}. Only that wallet can claim it — Provah refuses to
                 attest a claim to any other recipient.
@@ -944,7 +944,7 @@ export default function ProvaApp() {
                 <span className="flex items-center gap-2">
                   {p.campaignName}
                   {p.boundRecipient ? (
-                    <span className="inline-flex items-center gap-1 rounded-full border border-indigo-300 px-2 py-0.5 text-[10px] text-indigo-700 dark:border-indigo-800 dark:text-indigo-300">
+                    <span className="inline-flex items-center gap-1 rounded-full border border-accent/50 px-2 py-0.5 text-[10px] text-accent-ink">
                       <Lock className="h-2.5 w-2.5" strokeWidth={2} /> locked
                     </span>
                   ) : (
@@ -967,7 +967,7 @@ export default function ProvaApp() {
           anywhere) and claim it from any wallet, without ever having generated it yourself.
         </p>
         <textarea
-          className="rounded-md border border-neutral-300 bg-white px-3 py-2 font-mono text-xs text-neutral-900 transition-colors focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500/40 dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-100"
+          className="rounded-md border border-neutral-300 bg-white px-3 py-2 font-mono text-xs text-neutral-900 transition-colors focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/40 dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-100"
           rows={3}
           placeholder="Paste a Provah pass token here…"
           value={redeemToken}

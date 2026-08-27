@@ -14,6 +14,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
+  metadataBase: new URL("https://provah.vercel.app"),
   title: "Provah: private eligibility, portable capability",
   description:
     "Prove something about a wallet's STRK20 activity, then hand off a one-time capability that any wallet can redeem. No link between the two, on-chain or off.",

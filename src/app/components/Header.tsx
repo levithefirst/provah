@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import Logo from "./Logo";
 import ThemeToggle from "./ThemeToggle";
 
 const NAV_LINKS = [
@@ -10,26 +11,14 @@ const NAV_LINKS = [
   { href: "https://github.com/levithefirst/provah", label: "GitHub" },
 ];
 
-function LogoMark() {
-  return (
-    <svg width="28" height="28" viewBox="0 0 28 28" fill="none" aria-hidden="true">
-      <rect width="28" height="28" rx="8" fill="#4F46E5" />
-      <circle cx="10" cy="14" r="3" fill="white" />
-      <circle cx="18" cy="9" r="2.2" fill="white" fillOpacity="0.85" />
-      <circle cx="18" cy="19" r="2.2" fill="white" fillOpacity="0.85" />
-    </svg>
-  );
-}
-
 export default function Header() {
   const [open, setOpen] = useState(false);
 
   return (
     <header className="sticky top-0 z-50 border-b border-neutral-200/80 bg-white/80 backdrop-blur-md dark:border-neutral-800/80 dark:bg-neutral-950/80">
       <div className="mx-auto flex max-w-6xl items-center justify-between px-6 py-4">
-        <a href="#top" className="flex items-center gap-2.5 font-semibold text-neutral-900 dark:text-neutral-50">
-          <LogoMark />
-          <span className="text-lg tracking-tight">Provah</span>
+        <a href="#top" className="text-neutral-900 dark:text-neutral-50">
+          <Logo />
         </a>
 
         <nav className="hidden items-center gap-8 md:flex">
@@ -52,7 +41,7 @@ export default function Header() {
           </div>
           <a
             href="#app"
-            className="hidden rounded-full bg-neutral-900 px-5 py-2.5 text-sm font-semibold text-white shadow-sm transition-all hover:-translate-y-0.5 hover:bg-neutral-800 active:translate-y-0 sm:inline-block dark:bg-white dark:text-neutral-900 dark:hover:bg-neutral-200"
+            className="hidden rounded-full bg-accent px-5 py-2.5 text-sm font-semibold text-neutral-900 shadow-sm transition-all duration-150 hover:-translate-y-0.5 hover:brightness-95 active:translate-y-0 active:scale-[0.97] sm:inline-block"
           >
             Launch app
           </a>
@@ -96,7 +85,7 @@ export default function Header() {
             <a
               href="#app"
               onClick={() => setOpen(false)}
-              className="rounded-full bg-neutral-900 px-5 py-2.5 text-center text-sm font-semibold text-white dark:bg-white dark:text-neutral-900"
+              className="rounded-full bg-accent px-5 py-2.5 text-center text-sm font-semibold text-neutral-900"
             >
               Launch app
             </a>

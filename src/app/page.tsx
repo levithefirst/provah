@@ -23,7 +23,7 @@ export default function Home() {
         >
           <div className="mx-auto max-w-4xl px-6">
             <div className="mb-12 text-center">
-              <span className="text-xs font-semibold uppercase tracking-wider text-indigo-600 dark:text-indigo-400">
+              <span className="text-xs font-semibold uppercase tracking-wider text-accent-ink">
                 Live product
               </span>
               <h2 className="mt-4 text-3xl font-semibold tracking-tight text-neutral-900 sm:text-4xl dark:text-white">

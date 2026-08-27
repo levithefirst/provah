@@ -38,7 +38,7 @@ export default function Features() {
     <section className="bg-neutral-50 py-24 dark:bg-neutral-900/40">
       <div className="mx-auto max-w-6xl px-6">
         <div className="mx-auto max-w-2xl text-center">
-          <span className="text-xs font-semibold uppercase tracking-wider text-indigo-600 dark:text-indigo-400">
+          <span className="text-xs font-semibold uppercase tracking-wider text-accent-ink">
             Features
           </span>
           <h2 className="mt-4 text-3xl font-semibold tracking-tight text-neutral-900 sm:text-4xl dark:text-neutral-50">
@@ -52,7 +52,7 @@ export default function Features() {
               key={f.title}
               className="rounded-2xl border border-neutral-200 bg-white p-7 shadow-sm transition-all duration-300 hover:-translate-y-0.5 hover:shadow-md dark:border-neutral-800 dark:bg-neutral-900 dark:hover:shadow-none dark:hover:border-neutral-700"
             >
-              <div className="inline-flex h-10 w-10 items-center justify-center rounded-xl bg-indigo-50 text-indigo-600 dark:bg-indigo-500/10 dark:text-indigo-400">
+              <div className="inline-flex h-10 w-10 items-center justify-center rounded-xl bg-accent/15 text-accent-ink">
                 <f.Icon className="h-5 w-5" strokeWidth={1.75} />
               </div>
               <h3 className="mt-4 font-semibold text-neutral-900 dark:text-neutral-50">{f.title}</h3>

@@ -2,15 +2,14 @@ import { Lock, Ticket, Unlock } from "lucide-react";
 
 const NODES = [
   { Icon: Lock, label: "Wallet A", sub: "proves eligibility", tone: "neutral" },
-  { Icon: Ticket, label: "Capability", sub: "one-time, bearer", tone: "indigo" },
+  { Icon: Ticket, label: "Capability", sub: "one-time, bearer", tone: "accent" },
   { Icon: Unlock, label: "Wallet B", sub: "claims it, zero gas", tone: "emerald" },
 ] as const;
 
 const TONE_CLASSES: Record<string, string> = {
   neutral:
     "border-neutral-200 bg-neutral-50 text-neutral-800 dark:border-neutral-700 dark:bg-neutral-800/60 dark:text-neutral-200",
-  indigo:
-    "border-indigo-200 bg-indigo-50 text-indigo-700 dark:border-indigo-500/30 dark:bg-indigo-500/10 dark:text-indigo-300",
+  accent: "border-accent/40 bg-accent/10 text-accent-ink",
   emerald:
     "border-emerald-200 bg-emerald-50 text-emerald-700 dark:border-emerald-500/30 dark:bg-emerald-500/10 dark:text-emerald-300",
 };
@@ -58,12 +57,12 @@ export default function Hero() {
   return (
     <section id="top" className="relative overflow-hidden bg-white dark:bg-neutral-950">
       <div className="bg-dot-grid pointer-events-none absolute inset-0 opacity-60" />
-      <div className="pointer-events-none absolute -top-32 left-1/2 h-[32rem] w-[32rem] -translate-x-1/2 rounded-full bg-indigo-200/40 blur-3xl dark:bg-indigo-500/10" />
+      <div className="pointer-events-none absolute -top-32 left-1/2 h-[32rem] w-[32rem] -translate-x-1/2 rounded-full bg-accent/25 blur-3xl dark:bg-accent/10" />
 
       <div className="relative mx-auto flex max-w-6xl flex-col items-center px-6 pb-24 pt-20 text-center sm:pt-28">
         <h1 className="max-w-3xl text-4xl font-semibold tracking-tight text-neutral-900 sm:text-6xl dark:text-neutral-50">
           Private eligibility,
-          <span className="block text-indigo-600 dark:text-indigo-400">a capability anyone can redeem.</span>
+          <span className="block text-accent-ink">a capability anyone can redeem.</span>
         </h1>
 
         <p className="mt-6 max-w-xl text-lg text-neutral-600 dark:text-neutral-400">
@@ -75,7 +74,7 @@ export default function Hero() {
         <div className="mt-10 flex flex-col gap-3 sm:flex-row">
           <a
             href="#app"
-            className="rounded-full bg-neutral-900 px-7 py-3.5 text-sm font-semibold text-white shadow-lg shadow-neutral-900/10 transition-all duration-150 hover:-translate-y-0.5 hover:bg-neutral-800 active:translate-y-0 active:scale-[0.97] dark:bg-white dark:text-neutral-900 dark:shadow-none dark:hover:bg-neutral-200"
+            className="rounded-full bg-accent px-7 py-3.5 text-sm font-semibold text-neutral-900 shadow-lg shadow-accent/20 transition-all duration-150 hover:-translate-y-0.5 hover:brightness-95 active:translate-y-0 active:scale-[0.97]"
           >
             Try it live
           </a>

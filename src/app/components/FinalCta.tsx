@@ -11,7 +11,7 @@ export default function FinalCta() {
         </p>
         <a
           href="#app"
-          className="mt-8 inline-block rounded-full bg-neutral-900 px-8 py-4 text-sm font-semibold text-white shadow-lg shadow-neutral-900/10 transition-all duration-150 hover:-translate-y-0.5 hover:bg-neutral-800 active:translate-y-0 active:scale-[0.97] dark:bg-white dark:text-neutral-900 dark:shadow-none dark:hover:bg-neutral-200"
+          className="mt-8 inline-block rounded-full bg-accent px-8 py-4 text-sm font-semibold text-neutral-900 shadow-lg shadow-accent/20 transition-all duration-150 hover:-translate-y-0.5 hover:brightness-95 active:translate-y-0 active:scale-[0.97]"
         >
           Try the live demo
         </a>

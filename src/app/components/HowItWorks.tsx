@@ -21,7 +21,7 @@ export default function HowItWorks() {
     <section id="how-it-works" className="bg-white py-24 dark:bg-neutral-950">
       <div className="mx-auto max-w-6xl px-6">
         <div className="mx-auto max-w-2xl text-center">
-          <span className="text-xs font-semibold uppercase tracking-wider text-indigo-600 dark:text-indigo-400">
+          <span className="text-xs font-semibold uppercase tracking-wider text-accent-ink">
             How it works
           </span>
           <h2 className="mt-4 text-3xl font-semibold tracking-tight text-neutral-900 sm:text-4xl dark:text-neutral-50">
@@ -39,14 +39,14 @@ export default function HowItWorks() {
               key={s.n}
               className="relative rounded-3xl border border-neutral-200 bg-neutral-50 p-8 transition-shadow hover:shadow-md dark:border-neutral-800 dark:bg-neutral-900/60 dark:hover:shadow-none"
             >
-              <span className="text-sm font-semibold text-indigo-400 dark:text-indigo-500">{s.n}</span>
+              <span className="text-sm font-semibold text-accent-ink">{s.n}</span>
               <h3 className="mt-3 text-xl font-semibold text-neutral-900 dark:text-neutral-50">{s.title}</h3>
               <p className="mt-3 text-sm leading-relaxed text-neutral-600 dark:text-neutral-400">{s.body}</p>
             </div>
           ))}
         </div>
 
-        <div className="mt-10 rounded-2xl border border-indigo-100 bg-indigo-50 px-6 py-5 text-center text-sm font-medium text-indigo-700 dark:border-indigo-500/20 dark:bg-indigo-500/10 dark:text-indigo-300">
+        <div className="mt-10 rounded-2xl border border-accent/30 bg-accent/10 px-6 py-5 text-center text-sm font-medium text-accent-ink">
           No on-chain link, ever: the capability is the only thing that crosses between the
           qualifying wallet and the claiming wallet.
         </div>

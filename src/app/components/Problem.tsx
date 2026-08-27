@@ -5,7 +5,7 @@ export default function Problem() {
     <section className="bg-neutral-50 py-24 dark:bg-neutral-900/40">
       <div className="mx-auto grid max-w-6xl gap-12 px-6 md:grid-cols-2 md:items-center">
         <div>
-          <span className="text-xs font-semibold uppercase tracking-wider text-indigo-600 dark:text-indigo-400">
+          <span className="text-xs font-semibold uppercase tracking-wider text-accent-ink">
             The problem
           </span>
           <h2 className="mt-4 text-3xl font-semibold tracking-tight text-neutral-900 sm:text-4xl dark:text-neutral-50">
@@ -34,11 +34,11 @@ export default function Problem() {
             Without Provah: acting on private state means revealing the wallet, or building a
             one-off proof system per app.
           </p>
-          <div className="mt-8 flex items-center gap-3 text-indigo-500 dark:text-indigo-400">
+          <div className="mt-8 flex items-center gap-3 text-accent-ink">
             <Lock className="h-6 w-6" strokeWidth={1.75} />
-            <div className="h-px flex-1 bg-indigo-200 dark:bg-indigo-500/30" />
+            <div className="h-px flex-1 bg-accent/50 dark:bg-accent/30" />
             <Ticket className="h-6 w-6" strokeWidth={1.75} />
-            <div className="h-px flex-1 bg-indigo-200 dark:bg-indigo-500/30" />
+            <div className="h-px flex-1 bg-accent/50 dark:bg-accent/30" />
             <Check className="h-6 w-6" strokeWidth={1.75} />
           </div>
           <p className="mt-4 text-sm font-medium text-neutral-700 dark:text-neutral-300">
