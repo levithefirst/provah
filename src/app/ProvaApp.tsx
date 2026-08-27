@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { connect, disconnect, type StarknetWindowObject } from "@starknet-io/get-starknet";
 import { RpcProvider, hash, num } from "starknet";
 import { issuePassTypedData } from "@/lib/passChallenge";
+import QRCode from "qrcode";
 import {
   AlertTriangle,
   CheckCircle2,
@@ -83,6 +84,32 @@ async function fetchStrkBalance(address: string): Promise<bigint> {
 // server-side, run independently in the browser against public RPC.
 const STRK20_POOL_ADDRESS = "0x040337b1af3c663e86e333bab5a4b28da8d4652a15a69beee2b677776ffe812a";
 const DEPOSIT_EVENT_KEY = num.toHex(hash.starknetKeccak("Deposit"));
+
+// campaign_id is a #[key] on ProvaPass's own PassClaimed event
+// (contracts/prova_pass/src/prova_pass.cairo), so "how many passes has
+// this campaign paid out" is public, filterable chain data — read here
+// the same way self-check reads Deposit events: independently, from the
+// browser, no Provah backend involved.
+const PASS_CLAIMED_EVENT_KEY = num.toHex(hash.starknetKeccak("PassClaimed"));
+
+async function clientGetClaimCount(campaignId: string): Promise<number> {
+  const provider = new RpcProvider({ nodeUrl: PUBLIC_RPC_URL });
+  let count = 0;
+  let continuationToken: string | undefined;
+  do {
+    const page = await provider.getEvents({
+      address: PROVA_PASS_CONTRACT_ADDRESS,
+      keys: [[PASS_CLAIMED_EVENT_KEY], [num.toHex(campaignId)]],
+      chunk_size: 100,
+      continuation_token: continuationToken,
+      from_block: { block_number: 0 },
+      to_block: "latest",
+    });
+    count += page.events.length;
+    continuationToken = page.continuation_token;
+  } while (continuationToken);
+  return count;
+}
 
 type ClientDeposit = { amount: bigint; token: string; timestampSec: number };
 
@@ -394,6 +421,7 @@ export default function ProvaApp() {
   const [selfCheck, setSelfCheck] = useState<"idle" | "checking" | "eligible" | "ineligible" | "error">("idle");
   const [selfCheckDetail, setSelfCheckDetail] = useState<string>("");
   const [rewardPoolBalance, setRewardPoolBalance] = useState<string | null>(null);
+  const [campaignClaimCount, setCampaignClaimCount] = useState<number | null>(null);
 
   useEffect(() => {
     setLocalPasses(loadLocalPasses());
@@ -464,6 +492,29 @@ export default function ProvaApp() {
       })
       .catch(() => {
         if (!cancelled) setRewardPoolBalance(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [campaign]);
+
+  // Read-only campaign activity, from the same public event log anyone
+  // could query themselves — no new trust assumption, no Provah API call.
+  // Fails soft to "null" (hidden) rather than blocking the UI if RPC is
+  // slow or unreachable.
+  useEffect(() => {
+    if (!campaign) {
+      setCampaignClaimCount(null);
+      return;
+    }
+    let cancelled = false;
+    setCampaignClaimCount(null);
+    clientGetClaimCount(campaign.id)
+      .then((count) => {
+        if (!cancelled) setCampaignClaimCount(count);
+      })
+      .catch(() => {
+        if (!cancelled) setCampaignClaimCount(null);
       });
     return () => {
       cancelled = true;
@@ -763,6 +814,16 @@ export default function ProvaApp() {
                 . That is the hard cap on what any attestation — honest or not — could ever pay out.
               </p>
             )}
+            {campaignClaimCount !== null && (
+              <p className="mt-1 flex items-start gap-1.5 text-xs text-neutral-500 dark:text-neutral-500">
+                <ShieldCheck className="mt-0.5 h-3 w-3 shrink-0" strokeWidth={1.75} />
+                {campaignClaimCount === 0
+                  ? "No passes claimed yet for this campaign"
+                  : `${campaignClaimCount} pass${campaignClaimCount === 1 ? "" : "es"} claimed so far`}
+                , read live from ProvaPass's own <code>PassClaimed</code> events — public data, not
+                a Provah-asserted count.
+              </p>
+            )}
             {campaign.create_tx_hash && (
               <p className="mt-1 font-mono text-xs">
                 campaign tx:{" "}
@@ -1014,6 +1075,12 @@ export default function ProvaApp() {
                 </span>
               )}
             </div>
+            <p className="text-xs text-neutral-500 dark:text-neutral-500">
+              CLI verification (optional): same check, no browser, no Provah backend —{" "}
+              <code className="rounded bg-neutral-100 px-1 py-0.5 font-mono dark:bg-neutral-800">
+                node scripts/verify-claim.mjs {pass?.nullifier}
+              </code>
+            </p>
           </div>
         )}
       </section>
@@ -1144,6 +1211,12 @@ export default function ProvaApp() {
                 </span>
               )}
             </div>
+            <p className="text-xs text-neutral-500 dark:text-neutral-500">
+              CLI verification (optional): same check, no browser, no Provah backend —{" "}
+              <code className="rounded bg-neutral-100 px-1 py-0.5 font-mono dark:bg-neutral-800">
+                node scripts/verify-claim.mjs {decodePassToken(redeemToken)?.nullifier}
+              </code>
+            </p>
           </div>
         )}
       </section>
@@ -1153,7 +1226,25 @@ export default function ProvaApp() {
 
 function PassTokenExport({ pass }: { pass: LocalPass }) {
   const [copied, setCopied] = useState(false);
+  const [qrDataUrl, setQrDataUrl] = useState<string | null>(null);
   const token = encodePassToken(pass.campaignId, pass.nullifier);
+
+  useEffect(() => {
+    let cancelled = false;
+    setQrDataUrl(null);
+    // Same token as the text field below, just encoded as a scannable
+    // image — the pass token format itself is unchanged either way.
+    QRCode.toDataURL(token, { margin: 1, width: 176 })
+      .then((url) => {
+        if (!cancelled) setQrDataUrl(url);
+      })
+      .catch(() => {
+        if (!cancelled) setQrDataUrl(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [token]);
 
   async function copy() {
     try {
@@ -1172,28 +1263,40 @@ function PassTokenExport({ pass }: { pass: LocalPass }) {
           ? `This pass is locked to ${short(pass.boundRecipient)} — Provah will refuse to claim it to any other wallet, so sharing it with anyone else is pointless. Only useful to hand to that specific wallet's owner.`
           : "Share this token with anyone. They can redeem it from any wallet, no connection to this browser or wallet A required."}
       </p>
-      <div className="flex items-start gap-2">
-        <textarea
-          readOnly
-          className="flex-1 rounded-md border border-neutral-200 bg-neutral-50 px-2 py-1.5 font-mono text-xs text-neutral-900 dark:border-neutral-800 dark:bg-neutral-900 dark:text-neutral-100"
-          rows={2}
-          value={token}
-        />
-        <button
-          onClick={copy}
-          className={`inline-flex shrink-0 items-center gap-1.5 rounded-md border px-3 py-1.5 text-xs font-medium transition-all duration-150 active:scale-[0.95] ${
-            copied
-              ? "border-emerald-300 bg-emerald-50 text-emerald-700 dark:border-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-300"
-              : "border-neutral-400 text-neutral-900 hover:border-neutral-600 dark:border-neutral-600 dark:text-neutral-100 dark:hover:border-neutral-400"
-          }`}
-        >
-          {copied ? (
-            <CheckCircle2 key="copied" className="h-3.5 w-3.5 animate-pop-in" strokeWidth={1.75} />
-          ) : (
-            <Copy className="h-3.5 w-3.5" strokeWidth={1.75} />
-          )}
-          {copied ? "Copied" : "Copy"}
-        </button>
+      <div className="flex items-start gap-3">
+        {qrDataUrl && (
+          // eslint-disable-next-line @next/next/no-img-element -- a data: URL, not a remote image; next/image's optimizer doesn't apply here
+          <img
+            src={qrDataUrl}
+            alt="QR code encoding this pass token"
+            width={88}
+            height={88}
+            className="shrink-0 rounded-md border border-neutral-200 bg-white p-1 dark:border-neutral-800"
+          />
+        )}
+        <div className="flex flex-1 flex-col gap-2">
+          <textarea
+            readOnly
+            className="flex-1 rounded-md border border-neutral-200 bg-neutral-50 px-2 py-1.5 font-mono text-xs text-neutral-900 dark:border-neutral-800 dark:bg-neutral-900 dark:text-neutral-100"
+            rows={2}
+            value={token}
+          />
+          <button
+            onClick={copy}
+            className={`inline-flex shrink-0 items-center gap-1.5 self-start rounded-md border px-3 py-1.5 text-xs font-medium transition-all duration-150 active:scale-[0.95] ${
+              copied
+                ? "border-emerald-300 bg-emerald-50 text-emerald-700 dark:border-emerald-700 dark:bg-emerald-500/10 dark:text-emerald-300"
+                : "border-neutral-400 text-neutral-900 hover:border-neutral-600 dark:border-neutral-600 dark:text-neutral-100 dark:hover:border-neutral-400"
+            }`}
+          >
+            {copied ? (
+              <CheckCircle2 key="copied" className="h-3.5 w-3.5 animate-pop-in" strokeWidth={1.75} />
+            ) : (
+              <Copy className="h-3.5 w-3.5" strokeWidth={1.75} />
+            )}
+            {copied ? "Copied" : "Copy"}
+          </button>
+        </div>
       </div>
     </div>
   );

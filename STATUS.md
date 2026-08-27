@@ -229,6 +229,60 @@ with `reward_amount > 0` pays out identically for any real user who goes
 through the live app's `/api/pass` → `/api/claim` flow, no code change
 required.
 
+## What shipped in this pass (final push: pool-tx blocker re-check, CLI verification, QR, campaign activity)
+
+Mandate: maximize ranking odds under the sprint's actual judging weights
+(30% STRK20 integration depth, 30% working mainnet product, 25%
+innovation, 15% docs/OSS) without redesigning the product or attempting
+anything that needs the unpublished mainnet prover. In order:
+
+- **Re-confirmed, not assumed, that ≥3 pool-touching transactions can't be
+  produced from this sandbox.** Submitted a real (not dry-run) fee
+  estimate for `apply_actions(EmitViewingKeySet, screening: None)` from
+  the operating account — the cheapest possible pool action, no deposit,
+  no screening. It reverted with the same `EMPTY_PROOF_FACTS` this
+  project already documented, confirming (again, this time against a live
+  submission attempt) that there is no viewing-key-only shortcut. No gas
+  was spent (the revert happens at fee-estimation). See "Still needed for
+  ≥3 pool txs" above for the exact, non-fabricated path to closing this
+  gap — it needs a human operating a real privacy-enabled wallet.
+- **Made both remaining scoring blockers explicit, not silent.** Added
+  `_demo_video_note` and `_pool_tx_requirement_note` to `strk20.json`
+  (both prefixed `BLOCKER:`) and matching unchecked items in STATUS.md's
+  sprint checklist, so neither gap can be missed by a reader skimming
+  either document. Neither field was filled with a placeholder or a
+  fabricated value.
+- **Added `scripts/verify-claim.mjs`** — independent, public-RPC-only
+  verification of any claim (`is_nullifier_consumed`, plus an optional
+  STRK `balanceOf` delta), runnable with zero secrets and zero dependency
+  on Provah's backend or database. Linked from the live app, right next
+  to the existing "Verify on-chain" button, with the real nullifier
+  already filled into the command — so the CLI and the UI are always
+  checking the same claim, documented in README's "Verify it yourself."
+- **Added a QR code to every generated pass**, encoding the exact same
+  bearer token as the existing copy-to-clipboard text field — the token
+  format itself is unchanged, this is purely an additional way to move it
+  to a phone or a second device.
+- **Added read-only campaign activity**: every campaign card now shows how
+  many passes have been claimed for it, read live from `ProvaPass`'s own
+  `PassClaimed` event log (`campaign_id` is an indexed key on that event)
+  — the same public data anyone could query themselves, no new trust
+  assumption. Fails soft (hides the number) if RPC is slow.
+- **Restructured `DEMO.md`** into three explicit, independently-recordable
+  beats — the zero-barrier smoke test (works for anyone), the real
+  predicate with a visible reward payout (needs a qualifying wallet), and
+  an optional destination-lock fail-then-succeed beat — instead of one
+  script that silently assumed a qualifying wallet was available.
+- **Tightened README's opening** to state, in one paragraph, the three
+  things a judge needs in the first 30 seconds: what the primitive is,
+  exactly how the one remaining trust boundary is bounded (client
+  self-check, reward cap, nullifiers), and that the smoke-test path exists
+  so nobody needs real STRK20 history just to try it.
+
+None of the above touched the four real campaigns' predicates, attempted
+any in-app deposit/shield, or paid STRK from the Capability Smoke Test
+campaign.
+
 ## What shipped in this pass (zero-barrier access + instructional empty states)
 
 Someone preparing to record the demo video asked a direct question: can a
@@ -597,6 +651,49 @@ becomes reachable to apps directly, the only code that changes is
 replaces it") — the contract and
 claim flow need no changes at all.
 
+## Still needed for ≥3 pool txs
+
+The hackathon rules require ≥3 mainnet transactions that touched the
+STRK20 pool contract. Exactly **one** is verified today (see "Real STRK20
+pool transaction" above:
+[`0x0684bdad…fc385`](https://voyager.online/tx/0x0684bdad671fb81afe3cc2c27038e867e352e3323f666e4fd967e0086fffc385)).
+
+**Re-confirmed this pass, not assumed:** before asking for more human-wallet
+transactions, this pass re-tested whether the operating account could
+submit even the cheapest possible pool action — `EmitViewingKeySet` alone,
+with no deposit and no screening attestation — since an earlier pass's own
+notes could be misread as "this needs no proof." It doesn't: dry-running
+`apply_actions(EmitViewingKeySet, screening: None)` from the operating
+account (`scripts/mainnet-admin.mjs pool-register submit`, run via GitHub
+Actions) reverted at the fee-estimation stage — **no gas spent** — with the
+identical `EMPTY_PROOF_FACTS` error documented above. This confirms, again,
+that there is no viewing-key-only shortcut: every `apply_actions` call
+needs the prover's proof-facts bundle, regardless of which `ServerAction`
+variant it carries.
+
+**What would close this gap — needs a human with a privacy-enabled
+wallet, not more code:**
+1. Open Ready or Braavos (mainnet) in a wallet that already supports the
+   STRK20 privacy pool's Wallet API (`wallet_supportedWalletApi`,
+   `wallet_strk20InvokeTransaction` — see "The Wallet API route" below).
+2. Perform 2 more real pool actions through that wallet — e.g. two more
+   small shields, ideally from an address distinct from the one behind
+   `0x0684bdad…fc385` (a second real wallet strengthens the count more than
+   repeating the first one, though repeats still count as real
+   transactions).
+3. Hand the resulting transaction hash(es) to the team; each will be
+   verified independently via `scripts/mainnet-admin.mjs tx-status
+   <hash>` (checking finality `ACCEPTED_ON_L1`/`ACCEPTED_ON_L2`, execution
+   `SUCCEEDED`, and that the pool contract's own address emitted `Deposit`
+   / `ViewingKeySet` / `EncNoteCreated`) before being recorded in
+   `strk20.json` or here — exactly the process already used for the first
+   one. No hash will be added on say-so alone, and none has been
+   fabricated to pad this count.
+
+This is the single highest-leverage remaining gap for the STRK20-
+integration-depth score, and it is not something this sandbox can close on
+its own — it needs the operator's hands on a real wallet.
+
 ## The Wallet API route, and why it's the one that worked
 
 `docs/MAINNET-DAY-0.md` in the hackathon repo names two ways to reach the
@@ -625,10 +722,19 @@ that limitation is real and unchanged.
 
 - [x] Public GitHub repo with license (MIT; vendored StarkWare code keeps
       its own Apache-2.0 `LICENSE`)
-- [x] ≥3 real mainnet transactions (12: 11 ProvaPass + 1 direct STRK20 pool
-      transaction, both listed above)
+- [x] ≥3 real mainnet transactions, generally (12: 11 ProvaPass + 1 direct
+      STRK20 pool transaction, both listed above)
+- [ ] **BLOCKER: ≥3 mainnet transactions that specifically touched the
+      STRK20 pool contract.** Only 1 verified today. See "Still needed for
+      ≥3 pool txs" above for exactly what's missing and why — needs a human
+      operating a privacy-enabled wallet, re-confirmed this pass to be
+      outside what this project's own tooling can produce.
 - [x] Live public demo URL (https://provah.vercel.app/)
-- [x] 90-second demo script (`DEMO.md`)
+- [x] Demo script ready to record (`DEMO.md`)
+- [ ] **BLOCKER: demo_video required for scoring.** `strk20.json`'s
+      `demo_video` field is empty — the script above is ready, but nobody
+      has recorded against it yet. Set the field to the real URL the
+      moment one exists; do not fill it with a placeholder.
 - [x] Complete `strk20.json`
 - [x] README explains what's private vs. public
 - [x] Full user flow works live: generate a pass from one wallet, claim

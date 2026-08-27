@@ -1,11 +1,26 @@
 # Prova Pass
 
-**Live demo:** [provah.vercel.app](https://provah.vercel.app/) · **Contract:** [`0x74614e0cd54af7e59987a5d74fdd028209feff01fc20eca2934fe80b94db402`](https://starkscan.co/contract/0x74614e0cd54af7e59987a5d74fdd028209feff01fc20eca2934fe80b94db402) · **12 mainnet transactions (11 ProvaPass + 1 direct STRK20 pool transaction), 5 live campaigns (one needs no prior deposit), real STRK reward payouts on redeem:** see below · **Status:** [`STATUS.md`](STATUS.md)
+**Live demo:** [provah.vercel.app](https://provah.vercel.app/) · **Contract:** [`0x74614e0cd54af7e59987a5d74fdd028209feff01fc20eca2934fe80b94db402`](https://starkscan.co/contract/0x74614e0cd54af7e59987a5d74fdd028209feff01fc20eca2934fe80b94db402) · **12 mainnet transactions (11 ProvaPass + 1 direct STRK20 pool transaction), 5 live campaigns (one needs no prior deposit), real STRK reward payouts on redeem:** see below · **Status:** [`STATUS.md`](STATUS.md) · **Demo video:** _not yet recorded — script ready in [`DEMO.md`](DEMO.md), see `strk20.json`'s `demo_video` field_
 
 > **Why Provah:** it turns provable STRK20 activity into a transferable,
 > optionally destination-locked, unlinkable capability — independently
 > verifiable, and backed by a real STRK20 pool transaction and a live
 > mainnet capability contract, not just a signed promise.
+
+**The 30-second version.** Any provable fact about a wallet's public
+STRK20 pool activity becomes a one-time, transferable capability that a
+completely different wallet can redeem, gas-sponsored, with nothing
+on-chain linking the two. The one part that isn't yet fully trustless is
+that the predicate check is a signed server attestation, not a client-side
+ZK proof — but its blast radius is bounded three separate ways: the same
+eligibility check re-runs independently in your own browser before you
+ever ask the server, a reward campaign can never pay out more than the
+contract's own live STRK balance, and every claim consumes a fresh
+nullifier that anyone can verify was spent exactly once. And you don't
+need any of that STRK20 history to try the primitive itself — one live
+campaign, "Capability Smoke Test," is satisfied by any wallet including a
+brand-new one; the other four check real, public pool activity, one of
+them paying a real STRK reward on redeem. See "Try the live demo" below.
 
 Prova Pass is not a selective-disclosure dashboard. It's a **capability
 layer**: a way to turn *any* provable fact about STRK20 pool activity — a
@@ -224,6 +239,24 @@ all, straight from the browser's own public RPC connection
   that is the hard cap on what any attestation, honest or not, could ever
   pay out." If the attester's key were ever compromised, the maximum
   possible damage is a public, checkable number, not an unbounded claim.
+- **Campaign activity** — every campaign card shows how many passes have
+  been claimed for it so far, read live from `ProvaPass`'s own
+  `PassClaimed` event log (`campaign_id` is an indexed key on that event),
+  the same way anyone could query it themselves. It fails soft (just
+  hides the number) if public RPC is slow, rather than blocking the page.
+- **From the command line, with zero setup:** `scripts/verify-claim.mjs`
+  performs the identical `is_nullifier_consumed` check as the "Verify
+  on-chain" button, plus an optional STRK `balanceOf` delta, using only
+  public RPC — no Provah backend, no database, no secrets, nothing this
+  repo's own tooling has that you don't:
+  ```sh
+  node scripts/verify-claim.mjs <nullifier>
+  # or, to also confirm a reward payout:
+  node scripts/verify-claim.mjs <nullifier> <recipientAddress> <beforeBalanceWei>
+  ```
+  The live app links this exact command (with the real nullifier already
+  filled in) right next to its own "Verify on-chain" button, so the CLI
+  and the UI are always checking the same claim.
 
 All of this reduces Provah's trust surface to exactly what "What is
 private / what is not" documents, and no further: the predicate evaluation

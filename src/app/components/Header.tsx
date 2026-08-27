@@ -11,6 +11,12 @@ const NAV_LINKS = [
   { href: "https://github.com/levithefirst/provah", label: "GitHub" },
 ];
 
+// Set to the recorded demo's URL once available (see strk20.json's
+// demo_video and STATUS.md's "BLOCKER: demo_video" note) — until then this
+// stays null so the nav shows an honest "coming soon" label instead of a
+// dead or fabricated link.
+const DEMO_VIDEO_URL: string | null = null;
+
 export default function Header() {
   const [open, setOpen] = useState(false);
 
@@ -33,6 +39,23 @@ export default function Header() {
               {l.label}
             </a>
           ))}
+          {DEMO_VIDEO_URL ? (
+            <a
+              href={DEMO_VIDEO_URL}
+              target="_blank"
+              rel="noreferrer"
+              className="text-sm font-medium text-neutral-600 transition-colors hover:text-neutral-900 dark:text-neutral-400 dark:hover:text-neutral-50"
+            >
+              Demo video
+            </a>
+          ) : (
+            <span
+              className="text-sm font-medium text-neutral-400 dark:text-neutral-600"
+              title="Not recorded yet — see DEMO.md for the script"
+            >
+              Demo video (coming soon)
+            </span>
+          )}
         </nav>
 
         <div className="flex items-center gap-3">
@@ -78,6 +101,20 @@ export default function Header() {
                 {l.label}
               </a>
             ))}
+            {DEMO_VIDEO_URL ? (
+              <a
+                href={DEMO_VIDEO_URL}
+                target="_blank"
+                rel="noreferrer"
+                className="text-sm font-medium text-neutral-700 dark:text-neutral-300"
+              >
+                Demo video
+              </a>
+            ) : (
+              <span className="text-sm font-medium text-neutral-400 dark:text-neutral-600">
+                Demo video (coming soon)
+              </span>
+            )}
             <div className="flex items-center justify-between gap-3 border-t border-neutral-200 pt-4 dark:border-neutral-800">
               <span className="text-sm font-medium text-neutral-500 dark:text-neutral-400">Theme</span>
               <ThemeToggle />

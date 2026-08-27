@@ -139,6 +139,7 @@
     "defensive_expiry_check": "/api/claim now rejects an expired pass (410) before relaying a transaction, instead of relying solely on the Cairo contract's own on-chain expiry assert (prova_pass.cairo) and burning gas on a guaranteed revert."
   },
   "demo_video": "",
-  "_demo_video_note": "Not yet recorded. DEMO.md has the full 90-second script ready to record against the live demo_url below; no placeholder or stock video has been substituted.",
+  "_demo_video_note": "BLOCKER: demo_video required for scoring. Not yet recorded. DEMO.md has a full script (90s-3min, three beats: smoke-test flow for any wallet, real-predicate flow with a visible STRK balance delta, optional destination-lock fail-then-succeed) ready to record against the live demo_url below. No placeholder or stock video has been substituted; this field stays empty and honest until a real recording exists.",
+  "_pool_tx_requirement_note": "≥3 mainnet transactions that touched the STRK20 pool contract are required. Exactly 1 is verified today (see strk20_pool_transactions above). Reaching 3 needs 2 more real actions through a privacy-enabled wallet's Wallet API (Ready/Braavos) — see STATUS.md, 'Still needed for >=3 pool txs', for exactly why this project's own tooling cannot produce them (every apply_actions call, including a bare viewing-key registration with no deposit, was re-confirmed this pass to revert with EMPTY_PROOF_FACTS from an ordinary funded account with no wallet-mediated prover access).",
   "demo_url": "https://provah.vercel.app/"
 }
