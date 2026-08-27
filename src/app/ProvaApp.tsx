@@ -1,8 +1,9 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { connect, disconnect } from "@starknet-io/get-starknet";
+import { connect, disconnect, type StarknetWindowObject } from "@starknet-io/get-starknet";
 import { RpcProvider, hash, num } from "starknet";
+import { issuePassTypedData } from "@/lib/passChallenge";
 import {
   AlertTriangle,
   CheckCircle2,
@@ -154,15 +155,22 @@ function formatStrk(amountWei: string): string {
   return `${asNum} STRK`;
 }
 
+// Deliberately says "deposited," never "hold" or "balance": every predicate
+// here sums the pool's public Deposit events and never subtracts
+// withdrawals. That's not a shortcut — the pool's own Withdrawal event
+// keeps the withdrawing user encrypted (only the destination is a public
+// key), so a withdrawal can't be linked back to the depositor it came from
+// without breaking the pool's own privacy design. "Current balance" isn't
+// honestly computable from public data; "cumulative deposited" is.
 function predicateLabel(c: Campaign): string {
   switch (c.predicate_type) {
     case "balance_threshold":
-      return `Hold ≥ ${formatStrk(c.predicate_min_amount)} right now, no minimum holding period`;
+      return `Deposited ≥ ${formatStrk(c.predicate_min_amount)} cumulatively, ever — no minimum holding period`;
     case "deposit_count":
-      return `Make ≥ ${c.predicate_min_amount} separate deposit(s) into the pool (counts activity, not balance)`;
+      return `Make ≥ ${c.predicate_min_amount} separate deposit(s) into the pool (counts activity, not amount)`;
     case "held_since":
     default:
-      return `Hold ≥ ${formatStrk(c.predicate_min_amount)} for ≥ ${c.predicate_min_days} days`;
+      return `Deposited ≥ ${formatStrk(c.predicate_min_amount)} cumulatively at least ${c.predicate_min_days} days ago`;
   }
 }
 
@@ -241,11 +249,17 @@ function saveLocalPasses(passes: LocalPass[]) {
   }
 }
 
-async function connectWallet(): Promise<string | null> {
+async function connectWalletHandle(): Promise<{ address: string; wallet: StarknetWindowObject } | null> {
   const swo = await connect({ modalMode: "alwaysAsk", modalTheme: "dark" });
   if (!swo) return null;
   const accounts = await swo.request({ type: "wallet_requestAccounts" });
-  return Array.isArray(accounts) && accounts.length > 0 ? accounts[0] : null;
+  const address = Array.isArray(accounts) && accounts.length > 0 ? accounts[0] : null;
+  return address ? { address, wallet: swo } : null;
+}
+
+async function connectWallet(): Promise<string | null> {
+  const handle = await connectWalletHandle();
+  return handle?.address ?? null;
 }
 
 /**
@@ -347,6 +361,10 @@ export default function ProvaApp() {
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
   const [selected, setSelected] = useState<string>("");
   const [proverWallet, setProverWallet] = useState<string | null>(null);
+  // The raw wallet handle, kept only long enough to request the ownership
+  // signature in handleGeneratePass — never sent anywhere, and cleared the
+  // moment a pass is issued (handleGeneratePass already disconnects wallet A).
+  const [proverWalletHandle, setProverWalletHandle] = useState<StarknetWindowObject | null>(null);
   const [pass, setPass] = useState<LocalPass | null>(null);
   const [localPasses, setLocalPasses] = useState<LocalPass[]>([]);
   const [claimWallet, setClaimWallet] = useState<string>("");
@@ -457,30 +475,40 @@ export default function ProvaApp() {
 
   async function handleConnectProver() {
     try {
-      const addr = await connectWallet();
-      setProverWallet(addr);
+      const handle = await connectWalletHandle();
+      setProverWallet(handle?.address ?? null);
+      setProverWalletHandle(handle?.wallet ?? null);
       setPass(null);
-      setStatus(addr ? `Connected private wallet ${short(addr)}` : "No wallet selected.");
+      setStatus(handle ? `Connected private wallet ${short(handle.address)}` : "No wallet selected.");
     } catch {
       setStatus("Wallet connection failed or was rejected.");
     }
   }
 
   async function handleGeneratePass() {
-    if (!campaign || !proverWallet) return;
+    if (!campaign || !proverWallet || !proverWalletHandle) return;
     if (lockPass && !lockRecipient.trim()) {
       setStatus("Enter the wallet address to lock this pass to, or turn off locking.");
       return;
     }
     setBusyAction("generate");
-    setStatus("Evaluating predicate against your public deposit history…");
+    setStatus("Confirm in your wallet: proving you control this address…");
     try {
+      // Proves proverWallet actually controls this address, before Provah
+      // reads its public deposit history — without this, anyone who merely
+      // knew an eligible address (itself public) could mint a pass for it.
+      const signature = (await proverWalletHandle.request({
+        type: "wallet_signTypedData",
+        params: issuePassTypedData(campaign.id),
+      })) as string[];
+      setStatus("Evaluating predicate against your public deposit history…");
       const res = await fetch("/api/pass", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           campaignId: campaign.id,
           proverAddress: proverWallet,
+          signature,
           boundRecipient: lockPass ? lockRecipient.trim() : undefined,
         }),
       });
@@ -505,9 +533,10 @@ export default function ProvaApp() {
         );
         await disconnect();
         setProverWallet(null);
+        setProverWalletHandle(null);
       }
     } catch {
-      setStatus("Failed to reach Provah.");
+      setStatus("Wallet declined to sign, or Provah was unreachable.");
     } finally {
       setBusyAction("idle");
     }
@@ -797,7 +826,7 @@ export default function ProvaApp() {
         )}
         <button
           onClick={handleGeneratePass}
-          disabled={busy || !proverWallet || !campaign}
+          disabled={busy || !proverWallet || !proverWalletHandle || !campaign}
           className="inline-flex items-center gap-2 self-start rounded-md border border-neutral-400 px-4 py-2.5 text-neutral-900 transition-all duration-150 hover:-translate-y-0.5 hover:border-neutral-600 active:translate-y-0 active:scale-[0.97] disabled:pointer-events-none disabled:opacity-40 dark:border-neutral-600 dark:text-neutral-100 dark:hover:border-neutral-400"
         >
           {busyAction === "generate" ? (

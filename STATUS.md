@@ -2,17 +2,17 @@
 
 Last updated: 2026-08-27 · **Submission-ready.**
 
-> **Why Provah:** it turns private eligibility into a transferable, optionally
-> destination-locked, independently verifiable capability — backed by a real
-> STRK20 pool transaction and a live mainnet capability contract, not just a
-> signed promise.
+> **Why Provah:** it turns provable STRK20 activity into a transferable,
+> optionally destination-locked, unlinkable capability — independently
+> verifiable, and backed by a real STRK20 pool transaction and a live
+> mainnet capability contract, not just a signed promise.
 
 ## Why this deserves first place
 
 Most STRK20 submissions will show one wallet proving one fact to itself.
 Prova Pass ships the thing underneath that demo: a general capability layer
 where any provable fact about a wallet's STRK20 pool activity — held for N
-days, above a threshold right now, deposit count, or whatever predicate you
+days, deposited cumulatively above a threshold, deposit count, or whatever predicate you
 write next — becomes a portable bearer token that a completely different,
 unfunded wallet can redeem, gas-sponsored, with nothing on-chain linking the
 two. That primitive is proven four separate ways on the same deployed
@@ -64,10 +64,10 @@ and shippable today.
 
 | Campaign | Predicate type | Claim kind |
 |---|---|---|
-| STRK Loyalty Drop | `held_since` (held ≥1 STRK for ≥7 days) | capability |
-| STRK Holder Badge | `balance_threshold` (held ≥1 STRK, any time) | capability |
+| STRK Loyalty Drop | `held_since` (deposited ≥1 STRK cumulatively, ≥7 days ago) | capability |
+| STRK Holder Badge | `balance_threshold` (deposited ≥1 STRK cumulatively, ever) | capability |
 | Active Depositor | `deposit_count` (≥1 deposit into the pool) | capability |
-| STRK Welcome Reward | `balance_threshold` (held ≥1 STRK, any time) | **reward_token — pays 0.05 real STRK on redeem** |
+| STRK Welcome Reward | `balance_threshold` (deposited ≥1 STRK cumulatively, ever) | **reward_token — pays 0.05 real STRK on redeem** |
 
 This is the load-bearing architectural fact: `ProvaPass.cairo` never
 validates what a campaign's predicate *was* — `claim_with_prova_pass` only
@@ -183,6 +183,76 @@ real users at it. The mechanism itself is not a special case: any campaign
 with `reward_amount > 0` pays out identically for any real user who goes
 through the live app's `/api/pass` → `/api/claim` flow, no code change
 required.
+
+## What shipped in this pass (real ownership check, honesty pass on predicate copy)
+
+Input this pass: eight independent AI-judge critiques of the submission,
+synthesized and verified against the actual code/DB/contract before acting
+on any of them — several claims were confirmed, at least one was checked
+and found low-severity-but-real, and only the confirmed, verifiable ones
+were acted on. In priority order:
+
+- **Fixed a real, serious security gap: `/api/pass` claimed to verify
+  wallet ownership but never did.** Any caller who merely knew an eligible
+  address — itself public, since deposit history is public — could mint
+  (and for the reward campaign, redeem) a pass for a wallet they didn't
+  control. Added a proper SNIP-12 typed-data challenge
+  (`issuePassTypedData`, binding the campaign ID into the signed message so
+  a signature can't be replayed across campaigns): the connecting wallet
+  now signs it via `wallet_signTypedData`, and `/api/pass` verifies it
+  on-chain with `verifyMessageInStarknet` against SNIP-6
+  `is_valid_signature` before reading any deposit history or issuing
+  anything. This is the highest-severity, highest-priority fix from the
+  synthesis.
+- **Fixed a predicate-copy overclaim, everywhere it appeared — code, README,
+  and the live campaign descriptions in Postgres.** Copy previously said
+  things like "hold ≥1 STRK right now" / "in the private pool right now."
+  In truth, every predicate here sums the pool's public `Deposit` events
+  and never subtracts withdrawals — and that's structural, not a shortcut:
+  the pool's own `Withdrawal` event keeps the withdrawing user's address
+  encrypted (`enc_user_addr`, not a queryable key), so a withdrawal can't be
+  linked back to its depositor without breaking the pool's own privacy
+  design. "Current balance" isn't honestly computable from public data;
+  "cumulative deposited" is. Rewrote `predicateLabel` in `ProvaApp.tsx`,
+  the predicate table in the README, and — since these are read live from
+  Postgres by `/api/campaigns`, not baked into a deploy — the actual
+  `campaigns.description` rows for all four live campaigns, to say
+  "deposited cumulatively," never "hold" or "balance."
+- **Reframed the top-line pitch.** "Private eligibility" overclaimed what's
+  actually private here (the eligibility fact is checked against public
+  data; the real privacy property is unlinkability between the qualifying
+  wallet and the claiming wallet). Reworded the "Why Provah" pull-quote in
+  both README.md and this file to "provable STRK20 activity ... unlinkable
+  capability."
+- **Fixed stale/broken judge-facing links.** The homepage trust-stats panel
+  said "10" mainnet transactions (should be 11, after the direct pool
+  transaction added the pass before this one) and linked
+  `strk20.json` via `/blob/main/...`, which 404s because the repo's default
+  branch isn't named `main` — fixed to `/blob/HEAD/...`, which always
+  resolves to whichever branch is actually default.
+- **Checked and disclosed, not fixed: `create_campaign` has no
+  access-control check.** Confirmed by reading `prova_pass.cairo` directly:
+  any caller can call `create_campaign`, not just Prova's operating
+  account. Judged low practical severity and not worth a mainnet redeploy,
+  because `claim_with_prova_pass` still gates every payout behind
+  `check_ecdsa_signature` against the single attester key regardless of who
+  created the campaign — a rogue campaign can exist on-chain but can't
+  actually be paid out without also forging the attester's signature. Left
+  as a known, disclosed limitation rather than a fix, since the fix (adding
+  an owner check) would require a contract redeploy for a gap the
+  signature check already contains.
+- **Not fixable from this sandbox, flagged for the team:** two of the
+  eight critiques' most consistent asks — a second and third mainnet
+  transaction that directly touch the STRK20 pool (to comfortably clear
+  the "transactions must touch the pool" bar with more than one data
+  point), and recording `strk20.json`'s empty `demo_video` field — both
+  need a human operating a real wallet / screen recorder, which this build
+  environment cannot do headlessly. See the project's Wallet API notes
+  above for exactly how the one existing pool transaction was produced;
+  the same route (a privacy-enabled wallet's Wallet API, not this repo's
+  own tooling) is how any additional ones would be produced too.
+
+None of the above required a contract redeploy.
 
 ## What shipped in this pass (push toward 9/10: trust surface, capability, honesty)
 

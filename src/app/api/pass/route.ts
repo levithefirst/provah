@@ -2,12 +2,20 @@ import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { evaluatePredicate } from "@/lib/predicate";
 import { pedersen, signAttestation, deriveNullifier } from "@/lib/attestation";
+import { issuePassTypedData } from "@/lib/passChallenge";
+import { provider } from "@/lib/starknet";
 
 /**
  * Issue a Prova Pass: evaluate the campaign's predicate against the caller's
- * OWN deposit history (proved via a standard Starknet signMessage, checked
- * client-side by the wallet — the server only needs the address+salt to
- * derive a nullifier and to read PUBLIC deposit events; see predicate.ts).
+ * OWN deposit history — actually proved now, not just claimed by a code
+ * comment. The caller signs a SNIP-12 typed-data challenge binding this
+ * campaign to their address (see issuePassTypedData); this endpoint
+ * recomputes the identical hash and checks it against proverAddress's
+ * on-chain is_valid_signature before reading any deposit history or issuing
+ * anything. Without this, anyone who merely knew an eligible address —
+ * itself public, since deposit history is public — could mint (and for
+ * reward campaigns, redeem) a pass meant for that wallet. Deposit history
+ * itself stays PUBLIC on-chain data; only the salt is never persisted.
  * Returns a signed, one-time capability the caller can hand to ANY wallet to
  * redeem — this endpoint never learns or stores which wallet will claim it.
  */
@@ -16,6 +24,7 @@ export async function POST(req: NextRequest) {
     const body = await req.json();
     const campaignId: string = body.campaignId;
     const proverAddress: string = body.proverAddress; // the address whose deposit history is checked
+    const signature: string[] = body.signature; // wallet_signTypedData over issuePassTypedData(campaignId)
     const salt: string = body.salt ?? "0x" + Date.now().toString(16);
     // Optional: lock this pass to one destination wallet, chosen now instead
     // of at claim time. Turns the default pure-bearer capability into a
@@ -27,12 +36,28 @@ export async function POST(req: NextRequest) {
     if (!campaignId || !proverAddress) {
       return NextResponse.json({ ok: false, error: "campaignId and proverAddress required" }, { status: 400 });
     }
+    if (!Array.isArray(signature) || signature.length === 0) {
+      return NextResponse.json(
+        { ok: false, error: "signature required — sign the issuance challenge with proverAddress's wallet" },
+        { status: 400 }
+      );
+    }
     if (boundRecipient !== null) {
       try {
         BigInt(boundRecipient);
       } catch {
         return NextResponse.json({ ok: false, error: "boundRecipient must be a valid address" }, { status: 400 });
       }
+    }
+
+    const controlsAddress = await provider()
+      .verifyMessageInStarknet(issuePassTypedData(campaignId), signature, proverAddress)
+      .catch(() => false);
+    if (!controlsAddress) {
+      return NextResponse.json(
+        { ok: false, error: "signature does not prove control of proverAddress for this campaign" },
+        { status: 403 }
+      );
     }
 
     const { rows } = await db().query(`SELECT * FROM campaigns WHERE id = $1`, [campaignId]);

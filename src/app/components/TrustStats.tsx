@@ -1,5 +1,5 @@
 const STATS = [
-  { value: "10", label: "Confirmed mainnet transactions" },
+  { value: "11", label: "Confirmed mainnet transactions (10 ProvaPass + 1 direct STRK20 pool tx)" },
   { value: "4", label: "Live campaigns, one pays a real STRK reward" },
   { value: "1", label: "Contract, zero redeploys between them" },
 ];
@@ -41,7 +41,7 @@ export default function TrustStats() {
               . See{" "}
               <a
                 className="underline underline-offset-2"
-                href="https://github.com/levithefirst/provah/blob/main/strk20.json"
+                href="https://github.com/levithefirst/provah/blob/HEAD/strk20.json"
                 target="_blank"
                 rel="noreferrer"
               >

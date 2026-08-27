@@ -2,10 +2,10 @@
 
 **Live demo:** [provah.vercel.app](https://provah.vercel.app/) · **Contract:** [`0x74614e0cd54af7e59987a5d74fdd028209feff01fc20eca2934fe80b94db402`](https://starkscan.co/contract/0x74614e0cd54af7e59987a5d74fdd028209feff01fc20eca2934fe80b94db402) · **11 mainnet transactions (10 ProvaPass + 1 direct STRK20 pool transaction), 4 live campaigns, real STRK reward payouts on redeem:** see below · **Status:** [`STATUS.md`](STATUS.md)
 
-> **Why Provah:** it turns private eligibility into a transferable, optionally
-> destination-locked, independently verifiable capability — backed by a real
-> STRK20 pool transaction and a live mainnet capability contract, not just a
-> signed promise.
+> **Why Provah:** it turns provable STRK20 activity into a transferable,
+> optionally destination-locked, unlinkable capability — independently
+> verifiable, and backed by a real STRK20 pool transaction and a live
+> mainnet capability contract, not just a signed promise.
 
 Prova Pass is not a selective-disclosure dashboard. It's a **capability
 layer**: a way to turn *any* provable fact about STRK20 pool activity — a
@@ -85,12 +85,22 @@ three below are already live against the same deployed contract:
 
 | Predicate type | What it checks | Live campaign |
 |---|---|---|
-| `held_since` | Held ≥ X of asset Y for ≥ N days | "STRK Loyalty Drop" |
-| `balance_threshold` | Held ≥ X of asset Y right now, no duration | "STRK Holder Badge" |
+| `held_since` | Deposited ≥ X of asset Y, cumulatively, at least N days ago | "STRK Loyalty Drop" |
+| `balance_threshold` | Deposited ≥ X of asset Y, cumulatively, ever | "STRK Holder Badge" |
 | `deposit_count` | Made ≥ N separate deposits of asset Y into the pool | "Active Depositor" |
 
 All three read the same honest, public data source — the pool's `Deposit`
-events — just aggregated differently. Adding a fourth type is a function in
+events — just aggregated differently. **Be precise about what "cumulative"
+means here:** none of these predicates subtract withdrawals, so
+`balance_threshold` checks lifetime deposits, not current pool balance —
+and that's not a shortcut we could close by reading more events. The
+pool's own `Withdrawal` event keeps the withdrawing user's identity
+encrypted (`enc_user_addr`); only the destination address (`to_addr`) is a
+public, indexed key. A withdrawal genuinely cannot be linked back to the
+depositor it came from without breaking the pool's own privacy design, so
+"current net balance per address" isn't honestly computable from public
+data at all — "cumulative deposited" is the accurate ceiling, not a
+missing feature. Adding a fourth predicate type is a function in
 `src/lib/predicate.ts`, not a new deployment.
 
 The claim side is equally generic: a campaign's `claim_kind` is
