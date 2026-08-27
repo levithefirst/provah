@@ -1,5 +1,5 @@
 const STATS = [
-  { value: "12", label: "Confirmed mainnet transactions (11 ProvaPass + 1 direct STRK20 pool tx)" },
+  { value: "15", label: "Confirmed mainnet transactions (11 ProvaPass + 4 direct STRK20 pool txs)" },
   { value: "5", label: "Live campaigns, one open-access, one pays a real STRK reward" },
   { value: "1", label: "Contract, zero redeploys between them" },
 ];

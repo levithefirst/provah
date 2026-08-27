@@ -41,10 +41,11 @@ on faith; and if the attester's key were ever misused, the maximum damage
 is a live, publicly-checkable number (the reward pool's current on-chain
 balance), not an open-ended claim. And the pool-interaction question has
 moved past disclosure into evidence: alongside the eleven ProvaPass
-transactions, the team completed one real, direct STRK20 pool transaction
-— a viewing-key registration and 10 STRK shield through a privacy-enabled
-wallet's Wallet API, independently verified on-chain (see "Real STRK20
-pool transaction" below) — showing the honestly-documented blocker on the
+transactions, the team completed four real, direct STRK20 pool
+transactions — a viewing-key registration plus 10 STRK shield, then three
+more 10 STRK shields, all through a privacy-enabled wallet's Wallet API,
+each independently verified on-chain (see "Real STRK20 pool transactions"
+below) — showing the honestly-documented blocker on the
 app-side prover route doesn't mean the pool itself is unreachable, only
 that reaching it needs the route this project said it did. It's a
 primitive judges haven't seen elsewhere in this sprint, built honestly,
@@ -116,9 +117,9 @@ trust-boundary writeup. Prova's backend reads the pool's public `Deposit`
 events; it does not submit transactions to it. **A separate, direct pool
 transaction does exist — see immediately below.**
 
-## Real STRK20 pool transaction (1, direct, verified)
+## Real STRK20 pool transactions (4, direct, verified)
 
-Distinct in kind from the eleven above: a real, direct interaction with the
+Distinct in kind from the eleven above: real, direct interactions with the
 live STRK20 pool contract itself
 (`0x040337b1af3c663e86e333bab5a4b28da8d4652a15a69beee2b677776ffe812a`),
 completed by the team through a privacy-enabled wallet using the Wallet
@@ -160,6 +161,39 @@ prover URL, for exactly the reasons documented below. The two findings
 are consistent, not contradictory — the Wallet API route was always the
 one path that didn't need Provah's own prover access, and a human using
 the right wallet is precisely how it's meant to work.
+
+### Three more, closing the ≥3 pool-tx requirement
+
+Once the operating account funded that same human-operated wallet with
+more STRK, the team submitted three additional real shields through the
+identical Wallet API route (via Argent). Each was independently verified
+the same way — this repo's own `tx-status` diagnostic, not the submitted
+hash's word:
+
+| # | Hash | Block | Status | Pool events |
+|---|---|---|---|---|
+| 2 | [`0x0043faa1…7adb6`](https://voyager.online/tx/0x0043faa1484457b0e5b97b860c5b9e1fdc6a5711dece60554bc8149b0b27adb6) | 13955923 | `ACCEPTED_ON_L2`, `SUCCEEDED` | `Deposit` (10 STRK), `EncNoteCreated` |
+| 3 | [`0x0613601d…04421`](https://voyager.online/tx/0x0613601df1f0057935ada6df4657962f853ba2b023e733886e2d3a5c95504421) | 13955965 | `ACCEPTED_ON_L2`, `SUCCEEDED` | `Deposit` (10 STRK), `EncNoteCreated` |
+| 4 | [`0x003c4835…dd9473`](https://voyager.online/tx/0x003c48357164e2536e57798787e9710b8025bdd4a083d10a5af2447e6fdd9473) | 13956048 | `ACCEPTED_ON_L2`, `SUCCEEDED` | `Deposit` (10 STRK), `EncNoteCreated` |
+
+All three show the pool contract's own address
+(`0x040337b1af3c663e86e333bab5a4b28da8d4652a15a69beee2b677776ffe812a`) as
+the emitter of `Deposit` (selector `0x9149d21…92f2`, same as transaction 1,
+each depositing exactly 10 STRK) and `EncNoteCreated` (selector
+`0x23c2020…6ec5`), with `0x011c79a4697d55de8df336b0ce9cb832af6ef442373f41c479a6af4c8a0cf258`
+— the same wallet as transaction 1 — as the depositor. **Honest caveat:**
+each of these three transactions also routes an additional ~6 STRK through
+an intermediate contract to other addresses in the same call, which this
+project has not decoded further; only the pool's own `Deposit` /
+`EncNoteCreated` events are claimed here as verified pool activity, and
+that claim rests on the pool contract's own address being the receipt's
+event emitter, not on any assumption about the rest of the call.
+
+**This resolves the ≥3 pool-touching-transaction requirement**: 4 real,
+independently-verified transactions now touch the STRK20 pool directly
+(1 registration+shield, 3 further shields), exceeding the minimum. See
+`strk20.json`'s `strk20_pool_transactions` array for the machine-readable
+record of all four.
 
 ## Checked and rejected: a candidate second pool transaction
 
@@ -228,6 +262,37 @@ real users at it. The mechanism itself is not a special case: any campaign
 with `reward_amount > 0` pays out identically for any real user who goes
 through the live app's `/api/pass` → `/api/claim` flow, no code change
 required.
+
+## What shipped in this pass (≥3 pool-tx requirement resolved)
+
+Directly following the previous pass's re-confirmed finding that this
+sandbox's own tooling cannot produce more pool-touching transactions: the
+operator funded transaction 1's wallet
+(`0x011c79a4697d55de8df336b0ce9cb832af6ef442373f41c479a6af4c8a0cf258`)
+with 25 more STRK from Provah's operating account
+([`0x30e5470f…2e95d`](https://voyager.online/tx/0x30e5470ff4b3a504d8bf714bf96e34ca1b3fc7d2f0c460759da2cb8b252e95d)),
+then performed 3 more real shields through that wallet via Ready/Braavos's
+Wallet API (submitted through Argent). Each hash was independently
+verified via `scripts/mainnet-admin.mjs tx-status` before being recorded —
+same process as transaction 1, no hash taken on faith:
+
+- All three show the pool contract's own address as the emitter of
+  `Deposit` (10 STRK each, matching transaction 1's amount) and
+  `EncNoteCreated`, with the same wallet as depositor.
+- All three are `ACCEPTED_ON_L2`, execution `SUCCEEDED`.
+- Each transaction's call also relayed an additional, undecoded amount of
+  STRK through an intermediate contract to other addresses — disclosed
+  plainly in `strk20.json` and above rather than glossed over, since only
+  the pool's own `Deposit`/`EncNoteCreated` events are being claimed as
+  verified pool activity, not the full semantics of the surrounding call.
+
+This closes the single highest-leverage gap identified across every prior
+pass: the project now has 4 independently-verified, direct STRK20
+pool-touching transactions (was 1), exceeding the ≥3 requirement.
+`strk20.json`, this file, README.md, and `TrustStats.tsx` were all updated
+to match. The remaining, still-unresolved gap is `demo_video` — recording
+one requires a human with a screen recorder, which this sandbox cannot
+provide.
 
 ## What shipped in this pass (final push: pool-tx blocker re-check, CLI verification, QR, campaign activity)
 
@@ -641,24 +706,30 @@ participants hit the identical wall and got no response either. We did
 not fake a pool-touching transaction from this route, and we stopped
 attempting further variants once the revert reason confirmed the blocker
 is structural rather than an encoding bug on our side. **This is narrower
-than our own earlier phrasing of this conclusion** — a real pool
-transaction does exist, reached through the different route the
+than our own earlier phrasing of this conclusion** — real pool
+transactions do exist, reached through the different route the
 hackathon's own docs name for exactly this situation (a privacy-enabled
-wallet, not an app-held prover key); see "Real STRK20 pool transaction"
+wallet, not an app-held prover key); see "Real STRK20 pool transactions"
 above and "The Wallet API route, and why it's the one that worked" below. If the prover
 becomes reachable to apps directly, the only code that changes is
 `src/lib/predicate.ts` (see README "The attester today, and what
 replaces it") — the contract and
 claim flow need no changes at all.
 
-## Still needed for ≥3 pool txs
+## Still needed for ≥3 pool txs — RESOLVED
 
 The hackathon rules require ≥3 mainnet transactions that touched the
-STRK20 pool contract. Exactly **one** is verified today (see "Real STRK20
-pool transaction" above:
-[`0x0684bdad…fc385`](https://voyager.online/tx/0x0684bdad671fb81afe3cc2c27038e867e352e3323f666e4fd967e0086fffc385)).
+STRK20 pool contract. **This is now resolved: 4 are verified** (see "Real
+STRK20 pool transactions (4, direct, verified)" above) —
+[`0x0684bdad…fc385`](https://voyager.online/tx/0x0684bdad671fb81afe3cc2c27038e867e352e3323f666e4fd967e0086fffc385),
+[`0x0043faa1…7adb6`](https://voyager.online/tx/0x0043faa1484457b0e5b97b860c5b9e1fdc6a5711dece60554bc8149b0b27adb6),
+[`0x0613601d…04421`](https://voyager.online/tx/0x0613601df1f0057935ada6df4657962f853ba2b023e733886e2d3a5c95504421), and
+[`0x003c4835…dd9473`](https://voyager.online/tx/0x003c48357164e2536e57798787e9710b8025bdd4a083d10a5af2447e6fdd9473).
+The section below is kept as the historical record of how the gap was
+diagnosed and closed — read it as "how we got here," not a current
+blocker.
 
-**Re-confirmed this pass, not assumed:** before asking for more human-wallet
+**Re-confirmed at the time, not assumed:** before asking for more human-wallet
 transactions, this pass re-tested whether the operating account could
 submit even the cheapest possible pool action — `EmitViewingKeySet` alone,
 with no deposit and no screening attestation — since an earlier pass's own
@@ -671,28 +742,16 @@ that there is no viewing-key-only shortcut: every `apply_actions` call
 needs the prover's proof-facts bundle, regardless of which `ServerAction`
 variant it carries.
 
-**What would close this gap — needs a human with a privacy-enabled
-wallet, not more code:**
-1. Open Ready or Braavos (mainnet) in a wallet that already supports the
-   STRK20 privacy pool's Wallet API (`wallet_supportedWalletApi`,
-   `wallet_strk20InvokeTransaction` — see "The Wallet API route" below).
-2. Perform 2 more real pool actions through that wallet — e.g. two more
-   small shields, ideally from an address distinct from the one behind
-   `0x0684bdad…fc385` (a second real wallet strengthens the count more than
-   repeating the first one, though repeats still count as real
-   transactions).
-3. Hand the resulting transaction hash(es) to the team; each will be
-   verified independently via `scripts/mainnet-admin.mjs tx-status
-   <hash>` (checking finality `ACCEPTED_ON_L1`/`ACCEPTED_ON_L2`, execution
-   `SUCCEEDED`, and that the pool contract's own address emitted `Deposit`
-   / `ViewingKeySet` / `EncNoteCreated`) before being recorded in
-   `strk20.json` or here — exactly the process already used for the first
-   one. No hash will be added on say-so alone, and none has been
-   fabricated to pad this count.
-
-This is the single highest-leverage remaining gap for the STRK20-
-integration-depth score, and it is not something this sandbox can close on
-its own — it needs the operator's hands on a real wallet.
+**What closed this gap — a human with a privacy-enabled wallet, not more
+code:** the operator funded the same wallet from transaction 1 with 25
+more STRK from Provah's operating account
+([`0x30e5470f…2e95d`](https://voyager.online/tx/0x30e5470ff4b3a504d8bf714bf96e34ca1b3fc7d2f0c460759da2cb8b252e95d)),
+then performed 3 more real shields through Ready/Braavos via Argent's
+Wallet API — the exact route this section originally called for. Each
+resulting hash was handed to the team and independently verified via
+`scripts/mainnet-admin.mjs tx-status <hash>` before being recorded in
+`strk20.json` and above — no hash was added on say-so alone, and none was
+fabricated.
 
 ## The Wallet API route, and why it's the one that worked
 
@@ -713,8 +772,8 @@ only and unreachable from this sandbox's network, and the one
 buildable-from-source alternative, Argent's public `argent-x` repo,
 contains no STRK20 support as of this check. That's fine: the route was
 always meant to be driven by a human holding a real wallet, not a script.
-The team did exactly that — see "Real STRK20 pool transaction" above for
-the result. Provah's own backend still can't submit pool transactions or
+The team did exactly that, four times over — see "Real STRK20 pool
+transactions" above for the results. Provah's own backend still can't submit pool transactions or
 private note-to-note transfers directly, for the reasons documented above;
 that limitation is real and unchanged.
 
@@ -722,13 +781,12 @@ that limitation is real and unchanged.
 
 - [x] Public GitHub repo with license (MIT; vendored StarkWare code keeps
       its own Apache-2.0 `LICENSE`)
-- [x] ≥3 real mainnet transactions, generally (12: 11 ProvaPass + 1 direct
-      STRK20 pool transaction, both listed above)
-- [ ] **BLOCKER: ≥3 mainnet transactions that specifically touched the
-      STRK20 pool contract.** Only 1 verified today. See "Still needed for
-      ≥3 pool txs" above for exactly what's missing and why — needs a human
-      operating a privacy-enabled wallet, re-confirmed this pass to be
-      outside what this project's own tooling can produce.
+- [x] ≥3 real mainnet transactions, generally (15: 11 ProvaPass + 4 direct
+      STRK20 pool transactions, both listed above)
+- [x] ≥3 mainnet transactions that specifically touched the STRK20 pool
+      contract. **4 verified** — see "Real STRK20 pool transactions (4,
+      direct, verified)" above and "Still needed for ≥3 pool txs —
+      RESOLVED" for how the gap was closed.
 - [x] Live public demo URL (https://provah.vercel.app/)
 - [x] Demo script ready to record (`DEMO.md`)
 - [ ] **BLOCKER: demo_video required for scoring.** `strk20.json`'s

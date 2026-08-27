@@ -69,7 +69,7 @@
       "description": "Create 'Capability Smoke Test' (predicate: deposit_count with a minimum of 0 — satisfied by every address, including a brand-new one with zero STRK20 pool history). Fifth live campaign: added so the capability primitive itself (generate -> claim -> verify) is testable by anyone with a Starknet wallet, without first needing real pool activity. Pays no reward; proves nothing private about the connecting wallet."
     }
   ],
-  "_transactions_note": "The 11 entries above are all against ProvaPass, the capability-layer contract this project built on top of the pool's public deposit history — none of them are calls into the STRK20 pool contract itself. The single entry below, in strk20_pool_transactions, is different in kind: it is a real, direct interaction with the live STRK20 pool contract at 0x040337b1af3c663e86e333bab5a4b28da8d4652a15a69beee2b677776ffe812a, verified on-chain by this repo's own tooling (scripts/mainnet-admin.mjs tx-status), not merely asserted.",
+  "_transactions_note": "The 11 entries above are all against ProvaPass, the capability-layer contract this project built on top of the pool's public deposit history — none of them are calls into the STRK20 pool contract itself. The four entries below, in strk20_pool_transactions, are different in kind: real, direct interactions with the live STRK20 pool contract at 0x040337b1af3c663e86e333bab5a4b28da8d4652a15a69beee2b677776ffe812a, each independently verified on-chain by this repo's own tooling (scripts/mainnet-admin.mjs tx-status), not merely asserted.",
   "strk20_pool_transactions": [
     {
       "type": "invoke",
@@ -83,7 +83,49 @@
       "pool_events_emitted": ["ViewingKeySet", "Deposit", "EncNoteCreated"],
       "deposit_amount_wei": "10000000000000000000",
       "registered_user_addr": "0x011c79a4697d55de8df336b0ce9cb832af6ef442373f41c479a6af4c8a0cf258",
-      "description": "A real 'enable private tokens' (viewing-key registration + shield) mainnet transaction against the live STRK20 privacy pool contract itself, completed by the team through a privacy-enabled wallet (the Wallet API route documented in the hackathon repo's docs/MAINNET-DAY-0.md, distinct from the app-holds-its-own-prover-key route this project's own attempts confirmed is blocked). Verified independently via this repo's own tx-status diagnostic (scripts/mainnet-admin.mjs), not taken on the submitted hash's word: finality ACCEPTED_ON_L1, execution SUCCEEDED, and the pool contract's own address as the emitter of ViewingKeySet, Deposit (10 STRK, matching a documented real-world reference shield of the same size), and EncNoteCreated in one call. This is the project's one real, direct pool-touching transaction — separate from, and in addition to, the 10 ProvaPass transactions above."
+      "description": "A real 'enable private tokens' (viewing-key registration + shield) mainnet transaction against the live STRK20 privacy pool contract itself, completed by the team through a privacy-enabled wallet (the Wallet API route documented in the hackathon repo's docs/MAINNET-DAY-0.md, distinct from the app-holds-its-own-prover-key route this project's own attempts confirmed is blocked). Verified independently via this repo's own tx-status diagnostic (scripts/mainnet-admin.mjs), not taken on the submitted hash's word: finality ACCEPTED_ON_L1, execution SUCCEEDED, and the pool contract's own address as the emitter of ViewingKeySet, Deposit (10 STRK, matching a documented real-world reference shield of the same size), and EncNoteCreated in one call. This was the first of the project's real, direct pool-touching transactions."
+    },
+    {
+      "type": "invoke",
+      "hash": "0x0043faa1484457b0e5b97b860c5b9e1fdc6a5711dece60554bc8149b0b27adb6",
+      "network": "mainnet",
+      "block_number": 13955923,
+      "finality_status": "ACCEPTED_ON_L2",
+      "execution_status": "SUCCEEDED",
+      "voyager_url": "https://voyager.online/tx/0x0043faa1484457b0e5b97b860c5b9e1fdc6a5711dece60554bc8149b0b27adb6",
+      "pool_contract": "0x040337b1af3c663e86e333bab5a4b28da8d4652a15a69beee2b677776ffe812a",
+      "pool_events_emitted": ["Deposit", "EncNoteCreated"],
+      "deposit_amount_wei": "10000000000000000000",
+      "registered_user_addr": "0x011c79a4697d55de8df336b0ce9cb832af6ef442373f41c479a6af4c8a0cf258",
+      "description": "A second real shield into the live STRK20 privacy pool, from the same team-operated privacy-enabled wallet as the first pool transaction, via the same Wallet API route (submitted through Argent). Verified independently via this repo's own tx-status diagnostic: finality ACCEPTED_ON_L2, execution SUCCEEDED, and the pool contract's own address as the emitter of Deposit (0x11c79a4697d...cf258 depositing exactly 10 STRK, matching the first shield's size) and EncNoteCreated. The same transaction also relays a further ~6 STRK through an intermediate contract to other addresses, which this project has not further decoded; only the pool's own Deposit/EncNoteCreated events are claimed as verified pool activity here."
+    },
+    {
+      "type": "invoke",
+      "hash": "0x0613601df1f0057935ada6df4657962f853ba2b023e733886e2d3a5c95504421",
+      "network": "mainnet",
+      "block_number": 13955965,
+      "finality_status": "ACCEPTED_ON_L2",
+      "execution_status": "SUCCEEDED",
+      "voyager_url": "https://voyager.online/tx/0x0613601df1f0057935ada6df4657962f853ba2b023e733886e2d3a5c95504421",
+      "pool_contract": "0x040337b1af3c663e86e333bab5a4b28da8d4652a15a69beee2b677776ffe812a",
+      "pool_events_emitted": ["Deposit", "EncNoteCreated"],
+      "deposit_amount_wei": "10000000000000000000",
+      "registered_user_addr": "0x011c79a4697d55de8df336b0ce9cb832af6ef442373f41c479a6af4c8a0cf258",
+      "description": "A third real shield into the live STRK20 privacy pool, same wallet and route as the previous two. Verified independently via this repo's own tx-status diagnostic: finality ACCEPTED_ON_L2, execution SUCCEEDED, pool contract emitting Deposit (10 STRK) and EncNoteCreated. Same caveat as the second transaction regarding an additional undecoded ~6 STRK relay in the same call."
+    },
+    {
+      "type": "invoke",
+      "hash": "0x003c48357164e2536e57798787e9710b8025bdd4a083d10a5af2447e6fdd9473",
+      "network": "mainnet",
+      "block_number": 13956048,
+      "finality_status": "ACCEPTED_ON_L2",
+      "execution_status": "SUCCEEDED",
+      "voyager_url": "https://voyager.online/tx/0x003c48357164e2536e57798787e9710b8025bdd4a083d10a5af2447e6fdd9473",
+      "pool_contract": "0x040337b1af3c663e86e333bab5a4b28da8d4652a15a69beee2b677776ffe812a",
+      "pool_events_emitted": ["Deposit", "EncNoteCreated"],
+      "deposit_amount_wei": "10000000000000000000",
+      "registered_user_addr": "0x011c79a4697d55de8df336b0ce9cb832af6ef442373f41c479a6af4c8a0cf258",
+      "description": "A fourth real shield into the live STRK20 privacy pool, same wallet and route as the previous three. Verified independently via this repo's own tx-status diagnostic: finality ACCEPTED_ON_L2, execution SUCCEEDED, pool contract emitting Deposit (10 STRK) and EncNoteCreated. Same caveat as the second transaction regarding an additional undecoded relay in the same call. Together with the first pool transaction, this brings the count of independently-verified, direct STRK20 pool-touching transactions to 4, exceeding the >=3 requirement."
     }
   ],
   "contracts": [
@@ -140,6 +182,6 @@
   },
   "demo_video": "",
   "_demo_video_note": "BLOCKER: demo_video required for scoring. Not yet recorded. DEMO.md has a full script (90s-3min, three beats: smoke-test flow for any wallet, real-predicate flow with a visible STRK balance delta, optional destination-lock fail-then-succeed) ready to record against the live demo_url below. No placeholder or stock video has been substituted; this field stays empty and honest until a real recording exists.",
-  "_pool_tx_requirement_note": "≥3 mainnet transactions that touched the STRK20 pool contract are required. Exactly 1 is verified today (see strk20_pool_transactions above). Reaching 3 needs 2 more real actions through a privacy-enabled wallet's Wallet API (Ready/Braavos) — see STATUS.md, 'Still needed for >=3 pool txs', for exactly why this project's own tooling cannot produce them (every apply_actions call, including a bare viewing-key registration with no deposit, was re-confirmed this pass to revert with EMPTY_PROOF_FACTS from an ordinary funded account with no wallet-mediated prover access).",
+  "_pool_tx_requirement_note": "RESOLVED: >=3 mainnet transactions that touched the STRK20 pool contract were required; 4 are now verified in strk20_pool_transactions above, each independently confirmed via this repo's own tx-status diagnostic (finality + execution status + the pool contract's own address as event emitter), not taken on the submitted hashes' word. All four were completed by the team through a privacy-enabled wallet's Wallet API (Ready/Braavos via Argent) — this project's own backend still cannot submit pool transactions directly; see STATUS.md, 'Still needed for >=3 pool txs', for why.",
   "demo_url": "https://provah.vercel.app/"
 }

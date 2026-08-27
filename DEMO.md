@@ -114,8 +114,8 @@ working in the moment.
 
 For a judge who wants the full picture beyond this script — all five
 campaigns, the reward-pool solvency display, the honest trust-boundary
-explanation, and the one real, direct STRK20 pool transaction the team
+explanation, and the four real, direct STRK20 pool transactions the team
 completed separately from the app (verified in `STATUS.md`, "Real STRK20
-pool transaction(s)") — see `STATUS.md` and the README's "Try the live
+pool transactions") — see `STATUS.md` and the README's "Try the live
 demo" section, which cover the same flow with every feature included,
 unhurried.

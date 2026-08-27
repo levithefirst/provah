@@ -1,6 +1,6 @@
 # Prova Pass
 
-**Live demo:** [provah.vercel.app](https://provah.vercel.app/) · **Contract:** [`0x74614e0cd54af7e59987a5d74fdd028209feff01fc20eca2934fe80b94db402`](https://starkscan.co/contract/0x74614e0cd54af7e59987a5d74fdd028209feff01fc20eca2934fe80b94db402) · **12 mainnet transactions (11 ProvaPass + 1 direct STRK20 pool transaction), 5 live campaigns (one needs no prior deposit), real STRK reward payouts on redeem:** see below · **Status:** [`STATUS.md`](STATUS.md) · **Demo video:** _not yet recorded — script ready in [`DEMO.md`](DEMO.md), see `strk20.json`'s `demo_video` field_
+**Live demo:** [provah.vercel.app](https://provah.vercel.app/) · **Contract:** [`0x74614e0cd54af7e59987a5d74fdd028209feff01fc20eca2934fe80b94db402`](https://starkscan.co/contract/0x74614e0cd54af7e59987a5d74fdd028209feff01fc20eca2934fe80b94db402) · **15 mainnet transactions (11 ProvaPass + 4 direct STRK20 pool transactions), 5 live campaigns (one needs no prior deposit), real STRK reward payouts on redeem:** see below · **Status:** [`STATUS.md`](STATUS.md) · **Demo video:** _not yet recorded — script ready in [`DEMO.md`](DEMO.md), see `strk20.json`'s `demo_video` field_
 
 > **Why Provah:** it turns provable STRK20 activity into a transferable,
 > optionally destination-locked, unlinkable capability — independently
@@ -344,8 +344,8 @@ buildable-from-source alternative, Argent's `argent-x`, doesn't yet
 contain the feature — see `STATUS.md`'s "Final attempt: the Wallet API
 route" for the full trail) — but the route itself doesn't need this
 environment, only a human with the right wallet, which is exactly how
-it's meant to work. The team completed one such transaction directly: see
-"Real STRK20 pool transaction" below.
+it's meant to work. The team completed four such transactions directly:
+see "Real STRK20 pool transactions" below.
 
 Until that endpoint (hosted or self-run) exists, Prova's backend evaluates
 the predicate directly against the pool's *public* deposit history and
@@ -518,17 +518,17 @@ every pool state-change an app submits *directly*, not just deposits, is
 gated on a mainnet transaction-prover output with no published endpoint.
 We asked directly (issue #147) and got no answer before this submission.
 
-### Real STRK20 pool transaction (direct, separate from ProvaPass)
+### Real STRK20 pool transactions (4, direct, separate from ProvaPass)
 
 The app-side route above is blocked, but it isn't the only route: the
 hackathon's own docs describe a second one, where a privacy-enabled
 wallet reaches the prover on the user's behalf instead — see
 `STATUS.md`'s "The Wallet API route, and why it's the one that worked" for the full
 mechanics and why Provah's own tooling can't drive it headlessly. The
-team completed one such transaction directly against the live pool
-contract:
+team completed four such transactions directly against the live pool
+contract, all via the same wallet and route:
 
-[`0x0684bdad671fb81afe3cc2c27038e867e352e3323f666e4fd967e0086fffc385`](https://voyager.online/tx/0x0684bdad671fb81afe3cc2c27038e867e352e3323f666e4fd967e0086fffc385) —
+[`0x0684bdad…fc385`](https://voyager.online/tx/0x0684bdad671fb81afe3cc2c27038e867e352e3323f666e4fd967e0086fffc385) —
 block 13929673, `ACCEPTED_ON_L1`, `SUCCEEDED`. A viewing-key registration
 and 10 STRK shield ("enable private tokens"), verified independently by
 this repo's own `tx-status` diagnostic
@@ -537,15 +537,23 @@ hash's word: the pool contract itself is the emitter of `ViewingKeySet`,
 `Deposit` (10 STRK), and `EncNoteCreated` events, each selector matched by
 independently computing `starknet_keccak` over the event names — the exact
 three-event pattern the hackathon docs and a real reference implementation
-describe for a genuine wallet-mediated shield. Full detail, including the
-selector hashes and the registered address, is in `STATUS.md` and
-[`strk20.json`](strk20.json)'s `strk20_pool_transactions`.
+describe for a genuine wallet-mediated shield.
 
-This transaction is real and direct; it does not change the app-side
-conclusion above. Provah's backend still cannot submit pool transactions
-without the unpublished prover URL — this one was completed by a human
-through a real wallet, which is exactly the route the docs describe for
-this situation, not a workaround.
+Three more shields followed the same route, each independently verified
+the same way — pool contract as event emitter, `Deposit` (10 STRK) and
+`EncNoteCreated`, `ACCEPTED_ON_L2`/`SUCCEEDED`:
+[`0x0043faa1…7adb6`](https://voyager.online/tx/0x0043faa1484457b0e5b97b860c5b9e1fdc6a5711dece60554bc8149b0b27adb6) (block 13955923),
+[`0x0613601d…04421`](https://voyager.online/tx/0x0613601df1f0057935ada6df4657962f853ba2b023e733886e2d3a5c95504421) (block 13955965), and
+[`0x003c4835…dd9473`](https://voyager.online/tx/0x003c48357164e2536e57798787e9710b8025bdd4a083d10a5af2447e6fdd9473) (block 13956048).
+Full detail — selector hashes, the registered address, and an honest note
+about an additional undecoded relay in each of these three calls — is in
+`STATUS.md` and [`strk20.json`](strk20.json)'s `strk20_pool_transactions`.
+
+These four transactions are real and direct; they do not change the
+app-side conclusion above. Provah's backend still cannot submit pool
+transactions without the unpublished prover URL — these were completed by
+a human through a real wallet, which is exactly the route the docs
+describe for this situation, not a workaround.
 
 ## License
 
