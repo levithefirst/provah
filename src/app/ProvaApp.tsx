@@ -174,6 +174,14 @@ function predicateLabel(c: Campaign): string {
   }
 }
 
+// The zero-barrier campaign: deposit_count with a min of 0 is satisfied by
+// every address, including a brand-new empty wallet, since count >= 0 is
+// always true. Detected by predicate shape rather than by name, so it stays
+// correct even if the campaign is renamed.
+function isOpenAccessCampaign(c: Campaign): boolean {
+  return c.predicate_type === "deposit_count" && BigInt(c.predicate_min_amount || "0") === BigInt(0);
+}
+
 function predicateTypeTag(type: string): string {
   switch (type) {
     case "balance_threshold":
@@ -392,8 +400,13 @@ export default function ProvaApp() {
     fetch("/api/campaigns")
       .then((r) => r.json())
       .then((d) => {
-        setCampaigns(d.campaigns ?? []);
-        if (d.campaigns?.[0]) setSelected(d.campaigns[0].id);
+        const loaded: Campaign[] = d.campaigns ?? [];
+        setCampaigns(loaded);
+        // Default new visitors to the open-access campaign so the happy path
+        // works with zero deposit history and no reading required first.
+        const openAccess = loaded.find(isOpenAccessCampaign);
+        if (openAccess) setSelected(openAccess.id);
+        else if (loaded[0]) setSelected(loaded[0].id);
         if (d.error) setStatus(`Could not load campaigns: ${d.error}`);
       })
       .catch((err) => setStatus(`Could not load campaigns: ${err instanceof Error ? err.message : String(err)}`))
@@ -686,6 +699,7 @@ export default function ProvaApp() {
           {campaigns.map((c) => (
             <option key={c.id} value={c.id}>
               {c.name} ({predicateTypeTag(c.predicate_type)})
+              {isOpenAccessCampaign(c) ? " — no deposit needed" : ""}
             </option>
           ))}
         </select>
@@ -718,6 +732,11 @@ export default function ProvaApp() {
               <span className="text-xs px-2 py-0.5 rounded-full border border-neutral-300 text-neutral-700 dark:border-neutral-700 dark:text-neutral-300">
                 {claimKindTag(campaign.claim_kind)}
               </span>
+              {isOpenAccessCampaign(campaign) && (
+                <span className="text-xs px-2 py-0.5 rounded-full border border-accent/50 bg-accent/10 font-medium text-accent-ink">
+                  No deposit needed · try now
+                </span>
+              )}
               <span className="text-xs px-2 py-0.5 rounded-full border border-neutral-200 text-neutral-500 dark:border-neutral-800 dark:text-neutral-500">
                 {expiryLabel(campaign)}
               </span>
@@ -765,8 +784,27 @@ export default function ProvaApp() {
         <h2 className="text-lg font-medium">2. Connect the wallet with qualifying pool activity, generate a pass</h2>
         <p className="text-xs text-neutral-500 dark:text-neutral-500">
           Provah checks this wallet&apos;s public STRK20 deposit history against the campaign&apos;s
-          rule. It never sees or needs a private key, viewing key, or signature from it.
+          rule. It never sees a private key or viewing key — but generating a pass does ask this
+          wallet to sign a message proving you control it, before Provah reads anything.
         </p>
+        {campaign && (
+          <p
+            className={`flex items-start gap-1.5 rounded-md border px-2 py-1.5 text-xs ${
+              isOpenAccessCampaign(campaign)
+                ? "border-accent/40 bg-accent/10 text-accent-ink"
+                : "border-neutral-200 bg-neutral-50 text-neutral-600 dark:border-neutral-800 dark:bg-neutral-900 dark:text-neutral-400"
+            }`}
+          >
+            {isOpenAccessCampaign(campaign) ? (
+              <CheckCircle2 className="mt-0.5 h-3.5 w-3.5 shrink-0" strokeWidth={1.75} />
+            ) : (
+              <AlertTriangle className="mt-0.5 h-3.5 w-3.5 shrink-0" strokeWidth={1.75} />
+            )}
+            {isOpenAccessCampaign(campaign)
+              ? "No precondition: any wallet qualifies, including a brand-new, empty one."
+              : "Precondition: this wallet must already have made a real STRK20 deposit into the live pool satisfying the rule below — Provah only reads existing public deposit history, it cannot deposit for you."}
+          </p>
+        )}
         <div className="flex flex-wrap items-center gap-3">
           <button
             onClick={handleConnectProver}
@@ -805,6 +843,37 @@ export default function ProvaApp() {
               {selfCheck === "error" && selfCheckDetail}
             </span>
           </p>
+        )}
+        {proverWallet && selfCheck === "ineligible" && campaign && !isOpenAccessCampaign(campaign) && (
+          <div className="animate-rise-in flex flex-col gap-2 rounded-md border border-neutral-300 bg-neutral-50 p-3 text-xs text-neutral-700 dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-300">
+            <p>
+              This is expected, not a bug: Provah only reads this wallet&apos;s <em>existing</em>{" "}
+              public STRK20 deposit history — it can&apos;t deposit into the pool for you. To
+              qualify for this campaign:
+            </p>
+            <ol className="ml-4 list-decimal">
+              <li>Open Ready or Braavos on Starknet mainnet</li>
+              <li>Shield / deposit some STRK into the live STRK20 privacy pool</li>
+              <li>Come back, connect that same wallet as Wallet A, and self-check again</li>
+            </ol>
+            {campaigns.some(isOpenAccessCampaign) && (
+              <p className="flex flex-wrap items-center gap-2">
+                Want to try the full generate → claim → verify flow right now, no deposit needed?
+                <button
+                  onClick={() => {
+                    const oa = campaigns.find(isOpenAccessCampaign);
+                    if (oa) {
+                      setSelected(oa.id);
+                      setPass(null);
+                    }
+                  }}
+                  className="inline-flex items-center rounded-full border border-accent/50 bg-accent/10 px-2.5 py-1 text-[11px] font-medium text-accent-ink hover:bg-accent/20"
+                >
+                  Switch to Capability Smoke Test
+                </button>
+              </p>
+            )}
+          </div>
         )}
         <label className="flex items-center gap-2 text-sm text-neutral-700 dark:text-neutral-300">
           <input

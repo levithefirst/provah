@@ -61,9 +61,15 @@
       "entrypoint": "claim_with_prova_pass",
       "hash": "0x45f6b0d60d1ef2b232885a416f562c16aea15365ea215efdd0db10c4da514c",
       "description": "Redeem a 'STRK Welcome Reward' pass to a brand-new, never-before-used address. Verified via balanceOf: the recipient's STRK balance went from exactly 0 to exactly 50000000000000000 wei (0.05 STRK) in this transaction, alongside the usual nullifier consumption. Operator-attested for verification (see STATUS.md); the reward-payout mechanism itself (IERC20.transfer in claim_with_prova_pass) is live for any real user going through /api/pass and /api/claim."
+    },
+    {
+      "type": "invoke",
+      "entrypoint": "create_campaign",
+      "hash": "0x4e09d659241d884664dcd3d7e12c4815463fd2b4242a51c9d13f7bc87a8ffee",
+      "description": "Create 'Capability Smoke Test' (predicate: deposit_count with a minimum of 0 — satisfied by every address, including a brand-new one with zero STRK20 pool history). Fifth live campaign: added so the capability primitive itself (generate -> claim -> verify) is testable by anyone with a Starknet wallet, without first needing real pool activity. Pays no reward; proves nothing private about the connecting wallet."
     }
   ],
-  "_transactions_note": "The 10 entries above are all against ProvaPass, the capability-layer contract this project built on top of the pool's public deposit history — none of them are calls into the STRK20 pool contract itself. The single entry below, in strk20_pool_transactions, is different in kind: it is a real, direct interaction with the live STRK20 pool contract at 0x040337b1af3c663e86e333bab5a4b28da8d4652a15a69beee2b677776ffe812a, verified on-chain by this repo's own tooling (scripts/mainnet-admin.mjs tx-status), not merely asserted.",
+  "_transactions_note": "The 11 entries above are all against ProvaPass, the capability-layer contract this project built on top of the pool's public deposit history — none of them are calls into the STRK20 pool contract itself. The single entry below, in strk20_pool_transactions, is different in kind: it is a real, direct interaction with the live STRK20 pool contract at 0x040337b1af3c663e86e333bab5a4b28da8d4652a15a69beee2b677776ffe812a, verified on-chain by this repo's own tooling (scripts/mainnet-admin.mjs tx-status), not merely asserted.",
   "strk20_pool_transactions": [
     {
       "type": "invoke",
@@ -115,6 +121,13 @@
       "predicate_type": "balance_threshold",
       "claim_kind": "reward_token",
       "reward_amount_wei": "50000000000000000"
+    },
+    {
+      "id": "0x5ce82ce67493bfbbf1821517e2194a9fdfb7f8d46ba651931eb136e9d239a4",
+      "name": "Capability Smoke Test",
+      "predicate_type": "deposit_count",
+      "predicate_min_amount": "0",
+      "note": "Always-eligible open-access campaign — no STRK20 deposit required. Exists for public testability of the capability primitive, not to claim anything private."
     }
   ],
   "features": {

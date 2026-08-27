@@ -40,7 +40,7 @@ public RPC, so nobody has to take Prova's "eligible"/"not eligible" verdict
 on faith; and if the attester's key were ever misused, the maximum damage
 is a live, publicly-checkable number (the reward pool's current on-chain
 balance), not an open-ended claim. And the pool-interaction question has
-moved past disclosure into evidence: alongside the ten ProvaPass
+moved past disclosure into evidence: alongside the eleven ProvaPass
 transactions, the team completed one real, direct STRK20 pool transaction
 — a viewing-key registration and 10 STRK shield through a privacy-enabled
 wallet's Wallet API, independently verified on-chain (see "Real STRK20
@@ -52,7 +52,7 @@ and shippable today.
 
 ## Live
 
-- **Demo:** https://provah.vercel.app/ — shows all 4 live campaigns, backed
+- **Demo:** https://provah.vercel.app/ — shows all 5 live campaigns, backed
   by the deployed contract below.
 - **Contract (`ProvaPass`):**
   `0x74614e0cd54af7e59987a5d74fdd028209feff01fc20eca2934fe80b94db402`
@@ -60,7 +60,7 @@ and shippable today.
 - **Operating account** (OpenZeppelin single-signer, no guardian):
   `0x3b8fa185523ff035d5df73c55859a264ec39e3c72f8cb49fc2ee306ee842ede`
 
-## Live campaigns (4, all on the same contract, no redeploy between them)
+## Live campaigns (5, all on the same contract, no redeploy between them)
 
 | Campaign | Predicate type | Claim kind |
 |---|---|---|
@@ -68,19 +68,26 @@ and shippable today.
 | STRK Holder Badge | `balance_threshold` (deposited ≥1 STRK cumulatively, ever) | capability |
 | Active Depositor | `deposit_count` (≥1 deposit into the pool) | capability |
 | STRK Welcome Reward | `balance_threshold` (deposited ≥1 STRK cumulatively, ever) | **reward_token — pays 0.05 real STRK on redeem** |
+| Capability Smoke Test | `deposit_count`, minimum 0 — **satisfied by any address** | capability |
 
 This is the load-bearing architectural fact: `ProvaPass.cairo` never
 validates what a campaign's predicate *was* — `claim_with_prova_pass` only
 checks the attester's ECDSA signature over `(campaign_id, nullifier,
 recipient)`. Predicate logic lives entirely in `src/lib/predicate.ts`, so
 new predicate types (and new campaigns) require zero contract changes or
-redeploys. All four campaigns above ran through the same `create_campaign`
+redeploys. All five campaigns above ran through the same `create_campaign`
 entrypoint on the one deployed contract. The reward path was *already
 present* in the contract's `claim_with_prova_pass` — `if reward_amount > 0
 { token.transfer(recipient, reward_amount) }` — from the original deploy;
-this pass is the first time it was actually funded and exercised for real.
+the fourth campaign is the first time it was actually funded and exercised
+for real. The fifth, "Capability Smoke Test," is `deposit_count` with a
+minimum of zero — mathematically satisfied by every address, including
+one that has never touched the pool — added so the primitive itself is
+testable by anyone with a Starknet wallet, not only wallets with prior
+real deposit history. It pays no reward and asserts nothing private about
+the connecting wallet; see "Zero-barrier access" below.
 
-## Mainnet transactions (10, all confirmed)
+## Mainnet transactions (11, all confirmed)
 
 | # | Type | Hash |
 |---|---|---|
@@ -94,13 +101,14 @@ this pass is the first time it was actually funded and exercised for real.
 | 8 | `transfer` — fund ProvaPass with 1 real STRK | `0x76eeb4941bda080592816c3c51ca92da65c20de18c48e7d4782e90010927625` |
 | 9 | `create_campaign` "STRK Welcome Reward" | `0x1a64f5d8963b89118464d4613511b7f65eeb8ffb12f52df887e25404e5b32c0` |
 | 10 | `claim_with_prova_pass` — **real 0.05 STRK payout** | `0x45f6b0d60d1ef2b232885a416f562c16aea15365ea215efdd0db10c4da514c` |
+| 11 | `create_campaign` "Capability Smoke Test" | `0x4e09d659241d884664dcd3d7e12c4815463fd2b4242a51c9d13f7bc87a8ffee` |
 
 Machine-readable copy in [`strk20.json`](strk20.json). Exceeds the ≥3 real
 mainnet transaction requirement.
 
-**Scope note:** transactions 1–7, 9, and 10 are against `ProvaPass` (the
+**Scope note:** transactions 1–7 and 9–11 are against `ProvaPass` (the
 contract this project built); transaction 8 is a plain ERC20 `transfer` on
-the STRK token contract, used to fund `ProvaPass`. None of these ten are
+the STRK token contract, used to fund `ProvaPass`. None of these eleven are
 direct calls into the STRK20 pool contract itself — see "Attempted:
 pool-touching transactions" below for the full trail of why the app-side
 route is blocked, and the README's "What is private / what is not" for the
@@ -110,7 +118,7 @@ transaction does exist — see immediately below.**
 
 ## Real STRK20 pool transaction (1, direct, verified)
 
-Distinct in kind from the ten above: a real, direct interaction with the
+Distinct in kind from the eleven above: a real, direct interaction with the
 live STRK20 pool contract itself
 (`0x040337b1af3c663e86e333bab5a4b28da8d4652a15a69beee2b677776ffe812a`),
 completed by the team through a privacy-enabled wallet using the Wallet
@@ -170,6 +178,26 @@ pool-touching transaction** here, in `strk20.json`, or in the README — the
 project's real pool interaction remains the single transaction above,
 exactly as before this check.
 
+## Zero-barrier access: the Capability Smoke Test campaign
+
+Every campaign before this pass required real STRK20 pool deposit history
+to test — meaning a first-time visitor with a fresh Starknet wallet and no
+prior pool activity could never get past step 2 of the live demo. Provah
+cannot fix that by depositing on the user's behalf (the mainnet prover
+endpoint the pool's deposit/shield actions require is unpublished; see
+"Attempted: pool-touching transactions" below — this pass does not attempt
+to route around that). Instead, campaign 11
+(`0x4e09d659241d884664dcd3d7e12c4815463fd2b4242a51c9d13f7bc87a8ffee`) adds
+**"Capability Smoke Test"**: `deposit_count` with `predicate_min_amount =
+0`. `evaluateDepositCount` returns `eligible: deposits.length >= minAmount`
+— with `minAmount = 0` that is true for every address, including a wallet
+that has never sent a transaction, with zero extra logic and zero contract
+changes. `reward_amount` is `0`, so it can never touch the real STRK reward
+pool. This exists purely so the generate → claim → verify primitive is
+testable by anyone with a Starknet wallet extension, not to claim anything
+private about the connecting wallet — the UI labels it plainly as a smoke
+test, never as a privacy predicate. The four real campaigns are unchanged.
+
 ## Verified: redeem now moves real value, wei-for-wei
 
 Transaction 10 above is the direct answer to "redeem currently does almost
@@ -200,6 +228,56 @@ real users at it. The mechanism itself is not a special case: any campaign
 with `reward_amount > 0` pays out identically for any real user who goes
 through the live app's `/api/pass` → `/api/claim` flow, no code change
 required.
+
+## What shipped in this pass (zero-barrier access + instructional empty states)
+
+Someone preparing to record the demo video asked a direct question: can a
+brand-new user with an empty Starknet wallet actually use this product, or
+only a wallet that already happens to have STRK20 pool history? The honest
+answer before this pass was no — every campaign required real deposit
+history Provah cannot create on the user's behalf, so a first-time visitor
+silently hit a dead end at "not yet eligible" with no indication of why or
+what to do next. This pass, without touching the unpublished-prover
+constraint at all:
+
+- **Added a fifth live campaign, "Capability Smoke Test"** — see "Zero-
+  barrier access" above — `deposit_count` with a minimum of zero, satisfied
+  by any address including a brand-new one. Created via the existing
+  `mainnet-admin.mjs create-campaign` tooling (tx 11, recorded above and in
+  `strk20.json`); pays no reward, changes nothing about the four real
+  campaigns.
+- **Made "not eligible" instructional, not a dead end.** `ProvaApp.tsx`'s
+  self-check callout now explains, when a connected wallet doesn't qualify
+  for a real campaign, exactly why (Provah reads existing deposits, it
+  can't create them) and exactly what to do (shield STRK in Ready/Braavos,
+  then reconnect) — with a one-click button that switches the picker to
+  the smoke-test campaign instead. The campaign picker defaults new
+  visitors to the smoke test, badges it "no deposit needed" in both the
+  dropdown and the campaign detail panel, and a new precondition banner
+  states the requirement up front rather than only after a failed check.
+- **Added a "How to use" block** (`HowToUse.tsx`) directly above the live
+  app widget in `page.tsx`, laying out both paths — zero-deposit smoke test
+  vs. real predicate with optional reward — before a visitor touches
+  anything.
+- **Fixed a stale, self-contradicting line.** The step-2 helper text still
+  said connecting a wallet "never needs... a signature from it," which
+  stopped being true the moment the prior pass added the SNIP-12 ownership
+  challenge to `handleGeneratePass`. Corrected to describe what actually
+  happens: no private key or viewing key, but generating a pass does ask
+  for a signature proving control of the address.
+- **Removed "no setup required" from `page.tsx`'s copy** — replaced with an
+  accurate description of the two paths, since the real campaigns do have
+  a precondition (existing pool activity) even though the new smoke test
+  doesn't.
+- **Docs**: README's "Try the live demo" rewritten around the same two
+  paths, with one explicit sentence on why in-app shield isn't attempted
+  (unpublished prover, unchanged finding). All transaction/campaign counts
+  updated to 12 mainnet transactions (11 ProvaPass + 1 direct pool tx) and
+  5 live campaigns across README, STATUS.md, `strk20.json`, and the
+  homepage trust panel.
+
+None of the above required a contract redeploy, and none of it weakens or
+changes the four real campaigns' predicates.
 
 ## What shipped in this pass (real ownership check, honesty pass on predicate copy)
 
@@ -547,7 +625,7 @@ that limitation is real and unchanged.
 
 - [x] Public GitHub repo with license (MIT; vendored StarkWare code keeps
       its own Apache-2.0 `LICENSE`)
-- [x] ≥3 real mainnet transactions (11: 10 ProvaPass + 1 direct STRK20 pool
+- [x] ≥3 real mainnet transactions (12: 11 ProvaPass + 1 direct STRK20 pool
       transaction, both listed above)
 - [x] Live public demo URL (https://provah.vercel.app/)
 - [x] 90-second demo script (`DEMO.md`)

@@ -6,6 +6,7 @@ import Features from "./components/Features";
 import TrustStats from "./components/TrustStats";
 import FinalCta from "./components/FinalCta";
 import Footer from "./components/Footer";
+import HowToUse from "./components/HowToUse";
 import ProvaApp from "./ProvaApp";
 
 export default function Home() {
@@ -30,10 +31,11 @@ export default function Home() {
                 This is a real, working app
               </h2>
               <p className="mx-auto mt-4 max-w-xl text-neutral-600 dark:text-neutral-400">
-                Four live campaigns, real mainnet transactions, a gas-sponsored claim from any
-                wallet. Try it below, no setup required.
+                Five live campaigns, real mainnet transactions, a gas-sponsored claim from any
+                wallet. One campaign needs no prior STRK20 activity at all — pick your path below.
               </p>
             </div>
+            <HowToUse />
             <ProvaApp />
           </div>
         </section>

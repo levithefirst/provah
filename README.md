@@ -1,6 +1,6 @@
 # Prova Pass
 
-**Live demo:** [provah.vercel.app](https://provah.vercel.app/) · **Contract:** [`0x74614e0cd54af7e59987a5d74fdd028209feff01fc20eca2934fe80b94db402`](https://starkscan.co/contract/0x74614e0cd54af7e59987a5d74fdd028209feff01fc20eca2934fe80b94db402) · **11 mainnet transactions (10 ProvaPass + 1 direct STRK20 pool transaction), 4 live campaigns, real STRK reward payouts on redeem:** see below · **Status:** [`STATUS.md`](STATUS.md)
+**Live demo:** [provah.vercel.app](https://provah.vercel.app/) · **Contract:** [`0x74614e0cd54af7e59987a5d74fdd028209feff01fc20eca2934fe80b94db402`](https://starkscan.co/contract/0x74614e0cd54af7e59987a5d74fdd028209feff01fc20eca2934fe80b94db402) · **12 mainnet transactions (11 ProvaPass + 1 direct STRK20 pool transaction), 5 live campaigns (one needs no prior deposit), real STRK reward payouts on redeem:** see below · **Status:** [`STATUS.md`](STATUS.md)
 
 > **Why Provah:** it turns provable STRK20 activity into a transferable,
 > optionally destination-locked, unlinkable capability — independently
@@ -49,32 +49,57 @@ against the live mainnet privacy pool at
 
 ## Try the live demo
 
-1. Open [provah.vercel.app](https://provah.vercel.app/) — four campaigns
-   are live on it right now: three predicate types (see "Multiple
-   predicate types" below), plus one, "STRK Welcome Reward," that pays out
-   a real 0.05 STRK on redeem instead of just recording a claim.
-2. **Connect wallet A** — a wallet with real STRK20 deposit history. The
-   app immediately runs an independent, client-side eligibility check
-   against public RPC — watch it agree with the server before you even
-   click anything. Then click **Generate pass**: Prova checks the
-   same predicate against its public deposit events and hands back a pass
-   tied to a fresh nullifier.
-3. Copy the pass token, or just disconnect wallet A. **Connect wallet B** —
-   any other wallet, funded or not — and click **Claim**. The transaction
-   is gas-sponsored by Prova, so wallet B never needs to hold STRK.
+There are two paths, because one hard constraint shapes everything below:
+**Provah only reads a wallet's *existing* public STRK20 deposit history —
+it cannot deposit or shield on your behalf.** The mainnet prover endpoint
+the pool's own deposit/shield actions require is unpublished (see "Attempted:
+pool-touching transactions" in [`STATUS.md`](STATUS.md)), so Provah
+deliberately does not attempt to drive that flow from inside the app. If
+your wallet has no prior pool activity, Path 1 still lets you exercise the
+entire primitive today.
+
+**Path 1 — try it in 2 minutes, no deposit needed.** [provah.vercel.app](https://provah.vercel.app/)
+has a fifth campaign, **"Capability Smoke Test,"** built on the same
+`deposit_count` predicate type as "Active Depositor" but with a minimum of
+zero — satisfied by *any* address, including a brand-new, empty one. It
+proves the whole capability primitive with nothing at stake:
+1. Select **"Capability Smoke Test"** in the campaign picker (it's the
+   default for first-time visitors).
+2. **Connect wallet A** — literally any wallet — and click **Generate
+   pass**.
+3. **Connect wallet B** — any other wallet, even empty — and click
+   **Claim**. Gas-sponsored, so wallet B never needs STRK.
+4. Click **Verify on-chain** — reads `is_nullifier_consumed` straight from
+   public RPC, independent of Provah's backend.
+
+**Path 2 — the real predicate, optional reward.** Five campaigns are live
+in total: three real predicate types checked against genuine pool activity
+(see "Multiple predicate types" below), the open-access smoke test above,
+and "STRK Welcome Reward," which pays out a real 0.05 STRK on redeem
+instead of just recording a claim.
+1. Shield some STRK once, in Ready or Braavos, into the live STRK20 pool —
+   this is the one step Provah's own UI cannot do for you.
+2. Come back, select a real campaign, and **connect wallet A** — the app
+   immediately runs an independent, client-side eligibility check against
+   public RPC, so you see it agree with the server before clicking
+   anything. Then click **Generate pass**.
+3. Copy the pass token, or disconnect wallet A. **Connect wallet B** — any
+   other wallet, funded or not — and click **Claim**.
 4. Try the **"Redeem a pass someone gave you"** section instead: paste a
    pass token with no prior connection to the session that generated it,
-   connect any wallet, and claim. This is the same bearer-token property,
-   made literal and demoable.
-5. The resulting claim transaction is real, on mainnet, and contains
-   nothing that names wallet A. Click **Verify on-chain** afterward — the
-   app reads `is_nullifier_consumed` straight from public RPC, not from
-   Provah's own database, and for the reward campaign shows the exact STRK
-   balance delta it observed in your browser before and after the claim.
+   connect any wallet, and claim. Same bearer-token property, made literal.
+5. The resulting claim transaction is real, on mainnet, and names nothing
+   about wallet A. Click **Verify on-chain** — for the reward campaign this
+   also shows the exact STRK balance delta observed in your browser before
+   and after the claim.
 6. Before generating a pass, try checking **"Lock this pass to one
    destination wallet"** and pasting an address — that pass will then only
    ever be claimable by that one wallet; any other `recipient` is refused
    server-side before Provah even signs.
+
+A wallet with no eligibility for a real campaign sees an instructional
+empty state in the app itself, with a one-click link back to the smoke
+test — "not eligible" is never a dead end.
 
 ## Multiple predicate types, one contract, one attester
 
@@ -102,6 +127,13 @@ depositor it came from without breaking the pool's own privacy design, so
 data at all — "cumulative deposited" is the accurate ceiling, not a
 missing feature. Adding a fourth predicate type is a function in
 `src/lib/predicate.ts`, not a new deployment.
+
+A fifth live campaign, **"Capability Smoke Test,"** reuses `deposit_count`
+with a minimum of zero — deliberately satisfied by every address, including
+one that has never touched the pool. It exists purely so the capability
+primitive itself is testable by anyone with a Starknet wallet, without
+first needing real STRK20 pool activity; it pays no reward and proves
+nothing private about the connecting wallet. See "Try the live demo" above.
 
 The claim side is equally generic: a campaign's `claim_kind` is
 `capability` (nullifier consumed, nothing transferred — an allowlist entry

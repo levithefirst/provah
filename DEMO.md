@@ -1,12 +1,39 @@
 # Provah — 90-second demo script
 
-**Live app:** https://provah.vercel.app/ — four live campaigns on one deployed
-contract, real mainnet transactions, no setup required to watch.
+**Live app:** https://provah.vercel.app/ — five live campaigns on one deployed
+contract, real mainnet transactions.
 
-**Setup before recording:** two browser profiles or devices — Wallet A (real
-STRK20 deposit history satisfying at least one campaign's rule) and Wallet B
-(any other wallet, funded or brand new). Keep the "STRK Welcome Reward"
-campaign selected so the reward payout is visible in the same run.
+## Two ways to record this
+
+Provah only reads a wallet's *existing* public STRK20 deposit history — it
+can't deposit or shield on your behalf, because the mainnet prover endpoint
+the pool's own deposit/shield actions require is unpublished (see
+`STATUS.md`). That means whether you can record the full flow depends on
+whether Wallet A already has real pool activity:
+
+- **No qualifying wallet on hand? Use "Capability Smoke Test."** It's a
+  fifth campaign, `deposit_count` with a minimum of zero, satisfied by any
+  address including a brand-new one. Connect any Wallet A, generate a pass,
+  connect any Wallet B, claim, verify on-chain — the exact same primitive,
+  zero setup. This is the fastest path to a finished recording and works
+  for literally anyone with a wallet extension installed.
+- **Have a wallet with real deposit history? Use the script below.** It's
+  the stronger recording — it closes on a real 0.05 STRK payout, not just a
+  capability record — but it needs Wallet A to have already shielded STRK
+  into the live pool (Ready or Braavos).
+
+The script below is written for the second path (real predicate + reward)
+because it's the most compelling recording. If you don't have a qualifying
+Wallet A available right now, swap the selected campaign to "Capability
+Smoke Test" and skip straight to step 3 (no self-check needed — it always
+qualifies) — every other beat, including the closing Verify on-chain
+moment, works identically.
+
+**Setup before recording (real-predicate path):** two browser profiles or
+devices — Wallet A (real STRK20 deposit history satisfying at least one
+campaign's rule) and Wallet B (any other wallet, funded or brand new). Keep
+the "STRK Welcome Reward" campaign selected so the reward payout is visible
+in the same run.
 
 ## Hook (0:00–0:10)
 
@@ -65,8 +92,9 @@ working in the moment.
 
 ## Longer walkthrough
 
-For a judge who wants the full picture beyond 90 seconds — all four
-predicate types, the destination-binding demo, the reward-pool solvency
+For a judge who wants the full picture beyond 90 seconds — all five
+campaigns (including the zero-barrier smoke test), the destination-binding
+demo, the reward-pool solvency
 display, the honest trust-boundary explanation, and the one real, direct
 STRK20 pool transaction the team completed separately from the app
 (`0x0684bdad…fc385`, verified in `STATUS.md`) — see `STATUS.md` and the
