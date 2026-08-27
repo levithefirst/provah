@@ -61,8 +61,8 @@ export default function Hero() {
 
       <div className="relative mx-auto flex max-w-6xl flex-col items-center px-6 pb-24 pt-20 text-center sm:pt-28">
         <h1 className="max-w-3xl text-4xl font-semibold tracking-tight text-neutral-900 sm:text-6xl dark:text-neutral-50">
-          Private eligibility,
-          <span className="block text-accent-ink">a capability anyone can redeem.</span>
+          Provable STRK20 activity,
+          <span className="block text-accent-ink">an unlinkable capability anyone can redeem.</span>
         </h1>
 
         <p className="mt-6 max-w-xl text-lg text-neutral-600 dark:text-neutral-400">

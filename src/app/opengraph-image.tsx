@@ -37,7 +37,7 @@ export default function OpengraphImage() {
           </div>
         </div>
         <div style={{ display: "flex", marginTop: 28, color: "#a3a3a3", fontSize: 32 }}>
-          Private eligibility. Portable capability.
+          Provable STRK20 activity. Unlinkable capability.
         </div>
         <div
           style={{

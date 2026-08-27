@@ -153,6 +153,23 @@ are consistent, not contradictory — the Wallet API route was always the
 one path that didn't need Provah's own prover access, and a human using
 the right wallet is precisely how it's meant to work.
 
+## Checked and rejected: a candidate second pool transaction
+
+A second hash was submitted for consideration as an additional
+pool-touching transaction:
+[`0x05f156de8d1c2e50d5c9a091e77022eb62e53b5297d578a49372988e57c08135`](https://voyager.online/tx/0x05f156de8d1c2e50d5c9a091e77022eb62e53b5297d578a49372988e57c08135).
+Run through the same `tx-status` diagnostic used to verify the pool
+transaction above, block 13942844, `ACCEPTED_ON_L2` / `SUCCEEDED`. Its
+events are emitted by `0x04718f5a0fc34cc1af16a1cdee98ffb20c31f5cd61d6ab07201858f4287c938d`
+— the STRK ERC20 token contract, not the STRK20 pool
+(`0x040337b1af3c663e86e333bab5a4b28da8d4652a15a69beee2b677776ffe812a`) —
+and its shape (two `Transfer` events: a plain payment, plus the sequencer
+fee) is an ordinary STRK transfer between two externally-owned wallets. It
+does not touch the pool in any way, so **it is not recorded as a
+pool-touching transaction** here, in `strk20.json`, or in the README — the
+project's real pool interaction remains the single transaction above,
+exactly as before this check.
+
 ## Verified: redeem now moves real value, wei-for-wei
 
 Transaction 10 above is the direct answer to "redeem currently does almost

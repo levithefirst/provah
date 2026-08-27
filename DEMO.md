@@ -10,9 +10,9 @@ campaign selected so the reward payout is visible in the same run.
 
 ## Hook (0:00–0:10)
 
-*"This is Provah. I can prove something private about my wallet, hand a
-token to a total stranger, and they redeem it — with nothing on-chain ever
-connecting the two wallets. Watch."*
+*"This is Provah. I can prove my wallet's real, public STRK20 activity, hand
+a token to a total stranger, and they redeem it — with nothing on-chain
+ever connecting the two wallets. Watch."*
 
 ## Flow walkthrough (0:10–1:10)
 

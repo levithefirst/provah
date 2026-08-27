@@ -3,7 +3,7 @@ export default function FinalCta() {
     <section className="bg-neutral-50 py-24 dark:bg-neutral-900/40">
       <div className="mx-auto max-w-4xl px-6 text-center">
         <h2 className="text-3xl font-semibold tracking-tight text-neutral-900 sm:text-4xl dark:text-neutral-50">
-          Private eligibility in. Portable capability out.
+          Provable STRK20 activity in. Unlinkable capability out.
         </h2>
         <p className="mt-4 text-neutral-600 dark:text-neutral-400">
           Consumed exactly once, from anywhere. Try the whole flow yourself: it takes under two

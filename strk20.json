@@ -24,7 +24,7 @@
       "type": "invoke",
       "entrypoint": "create_campaign",
       "hash": "0x758de909a13df099cd72a1ef843217805d04ab761ab57e2bcd4c0f924c126e6",
-      "description": "Create 'STRK Loyalty Drop' (predicate: held_since — held >= 1 STRK for >= 7 days)."
+      "description": "Create 'STRK Loyalty Drop' (predicate: held_since — deposited >= 1 STRK cumulatively, at least 7 days ago)."
     },
     {
       "type": "invoke",
@@ -36,7 +36,7 @@
       "type": "invoke",
       "entrypoint": "create_campaign",
       "hash": "0x41c16869dcd1f3781e839f44b9ea86b867d872f4177e7790fee631d957de9b3",
-      "description": "Create 'STRK Holder Badge' (predicate: balance_threshold — hold >= 1 STRK right now, no minimum holding period). Second live campaign, proving the platform is multi-predicate, not single-purpose."
+      "description": "Create 'STRK Holder Badge' (predicate: balance_threshold — deposited >= 1 STRK cumulatively, ever, checked against public Deposit events). Second live campaign, proving the platform is multi-predicate, not single-purpose."
     },
     {
       "type": "invoke",
@@ -54,7 +54,7 @@
       "type": "invoke",
       "entrypoint": "create_campaign",
       "hash": "0x1a64f5d8963b89118464d4613511b7f65eeb8ffb12f52df887e25404e5b32c0",
-      "description": "Create 'STRK Welcome Reward' (predicate: balance_threshold, claim_kind: reward_token — hold >= 1 STRK, redeem pays 0.05 real STRK). Fourth live campaign: proof that redeeming a Prova Pass can move real value, not just record a claim."
+      "description": "Create 'STRK Welcome Reward' (predicate: balance_threshold, claim_kind: reward_token — deposited >= 1 STRK cumulatively, ever; redeem pays 0.05 real STRK). Fourth live campaign: proof that redeeming a Prova Pass can move real value, not just record a claim."
     },
     {
       "type": "invoke",
@@ -126,5 +126,6 @@
     "defensive_expiry_check": "/api/claim now rejects an expired pass (410) before relaying a transaction, instead of relying solely on the Cairo contract's own on-chain expiry assert (prova_pass.cairo) and burning gas on a guaranteed revert."
   },
   "demo_video": "",
+  "_demo_video_note": "Not yet recorded. DEMO.md has the full 90-second script ready to record against the live demo_url below; no placeholder or stock video has been substituted.",
   "demo_url": "https://provah.vercel.app/"
 }
