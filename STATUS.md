@@ -2,9 +2,10 @@
 
 Last updated: 2026-08-27 · **Submission-ready.**
 
-> **Why Provah:** it turns private eligibility into a capability — transferable,
-> optionally destination-locked, and independently verifiable by anyone — not
-> just a signed promise you have to take Provah's word for.
+> **Why Provah:** it turns private eligibility into a transferable, optionally
+> destination-locked, independently verifiable capability — backed by a real
+> STRK20 pool transaction and a live mainnet capability contract, not just a
+> signed promise.
 
 ## Why this deserves first place
 
@@ -113,7 +114,7 @@ Distinct in kind from the ten above: a real, direct interaction with the
 live STRK20 pool contract itself
 (`0x040337b1af3c663e86e333bab5a4b28da8d4652a15a69beee2b677776ffe812a`),
 completed by the team through a privacy-enabled wallet using the Wallet
-API route (see "Final attempt: the Wallet API route" below for exactly
+API route (see "The Wallet API route, and why it's the one that worked" below for exactly
 what that route is and why Provah's own tooling can't drive it headlessly)
 — not fabricated, and not asserted on the submitted hash's word alone:
 
@@ -425,86 +426,35 @@ than our own earlier phrasing of this conclusion** — a real pool
 transaction does exist, reached through the different route the
 hackathon's own docs name for exactly this situation (a privacy-enabled
 wallet, not an app-held prover key); see "Real STRK20 pool transaction"
-above and "Final attempt: the Wallet API route" below. If the prover
+above and "The Wallet API route, and why it's the one that worked" below. If the prover
 becomes reachable to apps directly, the only code that changes is
 `src/lib/predicate.ts` (see README "The attester today, and what
 replaces it") — the contract and
 claim flow need no changes at all.
 
-## Final attempt: the Wallet API route
+## The Wallet API route, and why it's the one that worked
 
-One route hadn't been tried: `docs/MAINNET-DAY-0.md` in the hackathon repo
-distinguishes two ways to reach the mainnet prover — an app holding its own
-keys and calling the prover directly (blocked, above), versus **a
-privacy-enabled wallet reaching the prover on the user's behalf**, which
-needs no prover URL of the app's own. This pass ran that route down to its
-actual ceiling.
+`docs/MAINNET-DAY-0.md` in the hackathon repo names two ways to reach the
+mainnet prover: an app holding its own keys (blocked — see above, a real
+on-chain `EMPTY_PROOF_FACTS` revert), or **a privacy-enabled wallet
+reaching the prover on the user's behalf**, needing no prover URL of the
+app's own. The exact RPC surface — `wallet_supportedWalletApi`,
+`wallet_strk20Balances`, `wallet_strk20InvokeTransaction` — is confirmed
+against a real, MIT-licensed reference implementation
+([PugarHuda/jalin](https://github.com/PugarHuda/jalin), cited in
+[issue #121](https://github.com/starkience/strk20-hackathon/issues/121)),
+whose own code cites a real Ready-wallet mainnet shield through it.
 
-- **Re-pulled the live pool's ABI fresh** (via the `pool-abi` mainnet-admin
-  action) rather than trusting the earlier dump. Confirmed `apply_actions`
-  really does take exactly two parameters —
-  `(actions: Span<ServerAction>, screening: Option<ScreeningAttestation>)`,
-  no third "proof" parameter — and it is the *only* state-changing
-  entrypoint on the contract; there is no separate plain `register` or
-  `deposit` function outside it. That rules out "we called the wrong
-  function" as the explanation for the earlier `EMPTY_PROOF_FACTS` revert:
-  the calldata shape was right, and the contract's proof requirement is
-  enforced some other way `apply_actions` itself doesn't expose — consistent
-  with the "fact registry" pattern Starknet's own proving stack uses
-  elsewhere, not with a missing calldata field on our end.
-- **Found the actual Wallet API surface.** It's three JSON-RPC methods a
-  wallet's injected provider must implement:
-  `wallet_supportedWalletApi` (version probe), `wallet_strk20Balances`
-  (read-only, safe to probe blind), and `wallet_strk20InvokeTransaction`
-  (the real one — takes an actions array, returns a transaction hash once
-  the wallet has proved it internally). None of this is Provah's own
-  invention: it's confirmed against a real, MIT-licensed reference
-  implementation ([PugarHuda/jalin](https://github.com/PugarHuda/jalin),
-  cited in [issue #121](https://github.com/starkience/strk20-hackathon/issues/121)),
-  whose own code comments cite a **real Ready-wallet mainnet transaction**
-  that shielded 10 STRK and emitted `ViewingKeySet`, `Deposit`, and
-  `EncNoteCreated` in one call — proof the route is real and has worked for
-  at least one team with the right wallet in hand.
-- **Confirmed we cannot stand up that wallet in this environment, for two
-  independent reasons, not one:**
-  1. The actual Ready and Braavos extension binaries are only distributed
-     through the Chrome Web Store. Both `chromewebstore.google.com` and
-     Google's direct CRX endpoint (`clients2.google.com`) are blocked by
-     this build environment's network egress policy (`CONNECT tunnel
-     failed, response 403` on direct test) — not a guess, a reproduced
-     failure.
-  2. As a fallback, we pulled Argent's own public, open-source wallet
-     repository (`argentlabs/argent-x`, the codebase "Ready" is built from)
-     and searched it for any trace of STRK20 support: zero matches for
-     `strk20` anywhere in the source. Braavos has no public repository to
-     fall back to at all — it's closed-source. So even with unrestricted
-     network access, there is currently no buildable-from-source wallet
-     that implements this API to load unpacked into a browser instead.
-- **Even setting the above aside, this route is structurally
-  human-in-the-loop.** `wallet_strk20InvokeTransaction` only exists inside a
-  real wallet extension's own popup UI, approved by whoever holds the keys;
-  it cannot be reached from a server-side script the way `apply_actions`
-  can. Automating a full wallet install, private-key import, and mainnet
-  transaction approval headlessly — even if the binary were reachable — is
-  not something we're willing to do unsupervised against an account holding
-  real funds, on a hackathon deadline, without a human confirming each step.
-
-**Updated conclusion:** the Wallet API route is real, documented precisely
-enough to identify its exact RPC surface, and has a genuine mainnet
-precedent — it is not vaporware. This build environment's own tooling
-still cannot drive it: no STRK20-capable wallet binary is reachable from
-this sandbox's network, and the one public, buildable-from-source
-alternative (Argent-X) does not yet contain the feature. But the route
-itself doesn't need this environment — it needs a human with a real
-privacy-enabled wallet, which is exactly how it's designed to work. The
-team completed one such transaction directly (see "Real STRK20 pool
-transaction" above), confirming this analysis rather than contradicting
-it: the blocker was specific to headless, environment-bound tooling, not
-to the route's existence. What remains out of reach for this project is
-still real — Provah's own backend cannot submit pool transactions or
-private note-to-note transfers without the unpublished prover URL — but
-"nobody on this team can touch the pool" is no longer the honest
-statement, and we've corrected it.
+This build environment's own automated tooling can't drive that route
+headlessly — the real Ready/Braavos wallet binaries are Chrome-Web-Store
+only and unreachable from this sandbox's network, and the one
+buildable-from-source alternative, Argent's public `argent-x` repo,
+contains no STRK20 support as of this check. That's fine: the route was
+always meant to be driven by a human holding a real wallet, not a script.
+The team did exactly that — see "Real STRK20 pool transaction" above for
+the result. Provah's own backend still can't submit pool transactions or
+private note-to-note transfers directly, for the reasons documented above;
+that limitation is real and unchanged.
 
 ## Sprint requirements checklist
 

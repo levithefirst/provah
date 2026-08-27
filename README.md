@@ -2,9 +2,10 @@
 
 **Live demo:** [provah.vercel.app](https://provah.vercel.app/) · **Contract:** [`0x74614e0cd54af7e59987a5d74fdd028209feff01fc20eca2934fe80b94db402`](https://starkscan.co/contract/0x74614e0cd54af7e59987a5d74fdd028209feff01fc20eca2934fe80b94db402) · **11 mainnet transactions (10 ProvaPass + 1 direct STRK20 pool transaction), 4 live campaigns, real STRK reward payouts on redeem:** see below · **Status:** [`STATUS.md`](STATUS.md)
 
-> **Why Provah:** it turns private eligibility into a capability — transferable,
-> optionally destination-locked, and independently verifiable by anyone — not
-> just a signed promise you have to take Provah's word for.
+> **Why Provah:** it turns private eligibility into a transferable, optionally
+> destination-locked, independently verifiable capability — backed by a real
+> STRK20 pool transaction and a live mainnet capability contract, not just a
+> signed promise.
 
 Prova Pass is not a selective-disclosure dashboard. It's a **capability
 layer**: a way to turn *any* provable fact about STRK20 pool activity — a
@@ -447,7 +448,7 @@ We asked directly (issue #147) and got no answer before this submission.
 The app-side route above is blocked, but it isn't the only route: the
 hackathon's own docs describe a second one, where a privacy-enabled
 wallet reaches the prover on the user's behalf instead — see
-`STATUS.md`'s "Final attempt: the Wallet API route" for the full
+`STATUS.md`'s "The Wallet API route, and why it's the one that worked" for the full
 mechanics and why Provah's own tooling can't drive it headlessly. The
 team completed one such transaction directly against the live pool
 contract:
