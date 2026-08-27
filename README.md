@@ -1,6 +1,6 @@
 # Prova Pass
 
-**Live demo:** [provah.vercel.app](https://provah.vercel.app/) · **Contract:** [`0x74614e0cd54af7e59987a5d74fdd028209feff01fc20eca2934fe80b94db402`](https://starkscan.co/contract/0x74614e0cd54af7e59987a5d74fdd028209feff01fc20eca2934fe80b94db402) · **10 mainnet transactions, 4 live campaigns, real STRK reward payouts on redeem:** see below · **Status:** [`STATUS.md`](STATUS.md)
+**Live demo:** [provah.vercel.app](https://provah.vercel.app/) · **Contract:** [`0x74614e0cd54af7e59987a5d74fdd028209feff01fc20eca2934fe80b94db402`](https://starkscan.co/contract/0x74614e0cd54af7e59987a5d74fdd028209feff01fc20eca2934fe80b94db402) · **11 mainnet transactions (10 ProvaPass + 1 direct STRK20 pool transaction), 4 live campaigns, real STRK reward payouts on redeem:** see below · **Status:** [`STATUS.md`](STATUS.md)
 
 > **Why Provah:** it turns private eligibility into a capability — transferable,
 > optionally destination-locked, and independently verifiable by anyone — not
@@ -261,13 +261,15 @@ user's behalf, through three wallet-injected RPC methods —
 `wallet_supportedWalletApi`, `wallet_strk20Balances`,
 `wallet_strk20InvokeTransaction` — confirmed against a real, MIT-licensed
 reference implementation and a real cited Ready-wallet mainnet transaction
-that shielded STRK through it. We checked this route to its actual ceiling
-too: the real wallet binaries are Chrome-Web-Store-only, and that store is
-unreachable from this build environment (reproduced, not assumed); the one
-public, buildable-from-source alternative, Argent's own `argent-x` repo,
-contains zero references to STRK20 support as of this check. See
-`STATUS.md`'s "Final attempt: the Wallet API route" for the full trail —
-this is the last realistic angle on this axis, not one we stopped short on.
+that shielded STRK through it. This build environment's own tooling
+cannot drive that route headlessly (the real wallet binaries are
+Chrome-Web-Store-only and unreachable from here, and the one
+buildable-from-source alternative, Argent's `argent-x`, doesn't yet
+contain the feature — see `STATUS.md`'s "Final attempt: the Wallet API
+route" for the full trail) — but the route itself doesn't need this
+environment, only a human with the right wallet, which is exactly how
+it's meant to work. The team completed one such transaction directly: see
+"Real STRK20 pool transaction" below.
 
 Until that endpoint (hosted or self-run) exists, Prova's backend evaluates
 the predicate directly against the pool's *public* deposit history and
@@ -396,7 +398,9 @@ node scripts/mainnet-admin.mjs create-campaign "STRK Loyalty Drop" 0x04718f5a0fc
 (class hash `0x7adfeaf0d075cda33b3128fd9cc255e34e7b778e907cbb64216d76bd7cf89e6`),
 with **4 live campaigns** — the original 3 predicate types plus a live
 reward campaign that pays out real STRK on redeem. Ten real, confirmed
-mainnet transactions, machine-readable in [`strk20.json`](strk20.json):
+`ProvaPass` mainnet transactions, machine-readable in
+[`strk20.json`](strk20.json) — plus, separately, one real, direct
+transaction against the STRK20 pool contract itself (see below):
 
 | # | Type | Hash |
 |---|---|---|
@@ -426,18 +430,46 @@ full verification trail.
 **Note on scope:** transactions 1–7, 9, and 10 are against `ProvaPass`, the
 contract this project built on top of the pool's public deposit events;
 transaction 8 is a plain ERC20 `transfer` on the STRK token contract, used
-to fund `ProvaPass`. **None of the ten are direct calls into the STRK20
-pool contract itself.** This
-isn't for lack of trying: see "The attester today" above and `STATUS.md` for
-a real, on-chain-confirmed attempt — a hand-built `apply_actions` call for
-the pool's least-restrictive action (registering a viewing key, which needs
-no screening) reached the live contract and reverted with its own
-`EMPTY_PROOF_FACTS` error, proving that every pool state-change, not just
-deposits, is gated on a mainnet transaction-prover output with no published
-endpoint. We asked directly (issue #147) and got no answer before this
-submission. Prova reads the pool's public `Deposit` events; it does not
-write to the pool — and now has concrete on-chain evidence, not just doc
-research, for why.
+to fund `ProvaPass`. **None of these ten are direct calls into the STRK20
+pool contract itself** — that's a separate transaction, below. Provah's own
+backend reads the pool's public `Deposit` events; it does not write to the
+pool. This isn't for lack of trying the app-side route: see "The attester
+today" above and `STATUS.md` for a real, on-chain-confirmed attempt — a
+hand-built `apply_actions` call for the pool's least-restrictive action
+(registering a viewing key, which needs no screening) reached the live
+contract and reverted with its own `EMPTY_PROOF_FACTS` error, proving that
+every pool state-change an app submits *directly*, not just deposits, is
+gated on a mainnet transaction-prover output with no published endpoint.
+We asked directly (issue #147) and got no answer before this submission.
+
+### Real STRK20 pool transaction (direct, separate from ProvaPass)
+
+The app-side route above is blocked, but it isn't the only route: the
+hackathon's own docs describe a second one, where a privacy-enabled
+wallet reaches the prover on the user's behalf instead — see
+`STATUS.md`'s "Final attempt: the Wallet API route" for the full
+mechanics and why Provah's own tooling can't drive it headlessly. The
+team completed one such transaction directly against the live pool
+contract:
+
+[`0x0684bdad671fb81afe3cc2c27038e867e352e3323f666e4fd967e0086fffc385`](https://voyager.online/tx/0x0684bdad671fb81afe3cc2c27038e867e352e3323f666e4fd967e0086fffc385) —
+block 13929673, `ACCEPTED_ON_L1`, `SUCCEEDED`. A viewing-key registration
+and 10 STRK shield ("enable private tokens"), verified independently by
+this repo's own `tx-status` diagnostic
+(`scripts/mainnet-admin.mjs tx-status <hash>`) rather than taken on the
+hash's word: the pool contract itself is the emitter of `ViewingKeySet`,
+`Deposit` (10 STRK), and `EncNoteCreated` events, each selector matched by
+independently computing `starknet_keccak` over the event names — the exact
+three-event pattern the hackathon docs and a real reference implementation
+describe for a genuine wallet-mediated shield. Full detail, including the
+selector hashes and the registered address, is in `STATUS.md` and
+[`strk20.json`](strk20.json)'s `strk20_pool_transactions`.
+
+This transaction is real and direct; it does not change the app-side
+conclusion above. Provah's backend still cannot submit pool transactions
+without the unpublished prover URL — this one was completed by a human
+through a real wallet, which is exactly the route the docs describe for
+this situation, not a workaround.
 
 ## License
 

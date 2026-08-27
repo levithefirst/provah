@@ -63,6 +63,23 @@
       "description": "Redeem a 'STRK Welcome Reward' pass to a brand-new, never-before-used address. Verified via balanceOf: the recipient's STRK balance went from exactly 0 to exactly 50000000000000000 wei (0.05 STRK) in this transaction, alongside the usual nullifier consumption. Operator-attested for verification (see STATUS.md); the reward-payout mechanism itself (IERC20.transfer in claim_with_prova_pass) is live for any real user going through /api/pass and /api/claim."
     }
   ],
+  "_transactions_note": "The 10 entries above are all against ProvaPass, the capability-layer contract this project built on top of the pool's public deposit history — none of them are calls into the STRK20 pool contract itself. The single entry below, in strk20_pool_transactions, is different in kind: it is a real, direct interaction with the live STRK20 pool contract at 0x040337b1af3c663e86e333bab5a4b28da8d4652a15a69beee2b677776ffe812a, verified on-chain by this repo's own tooling (scripts/mainnet-admin.mjs tx-status), not merely asserted.",
+  "strk20_pool_transactions": [
+    {
+      "type": "invoke",
+      "hash": "0x0684bdad671fb81afe3cc2c27038e867e352e3323f666e4fd967e0086fffc385",
+      "network": "mainnet",
+      "block_number": 13929673,
+      "finality_status": "ACCEPTED_ON_L1",
+      "execution_status": "SUCCEEDED",
+      "voyager_url": "https://voyager.online/tx/0x0684bdad671fb81afe3cc2c27038e867e352e3323f666e4fd967e0086fffc385",
+      "pool_contract": "0x040337b1af3c663e86e333bab5a4b28da8d4652a15a69beee2b677776ffe812a",
+      "pool_events_emitted": ["ViewingKeySet", "Deposit", "EncNoteCreated"],
+      "deposit_amount_wei": "10000000000000000000",
+      "registered_user_addr": "0x011c79a4697d55de8df336b0ce9cb832af6ef442373f41c479a6af4c8a0cf258",
+      "description": "A real 'enable private tokens' (viewing-key registration + shield) mainnet transaction against the live STRK20 privacy pool contract itself, completed by the team through a privacy-enabled wallet (the Wallet API route documented in the hackathon repo's docs/MAINNET-DAY-0.md, distinct from the app-holds-its-own-prover-key route this project's own attempts confirmed is blocked). Verified independently via this repo's own tx-status diagnostic (scripts/mainnet-admin.mjs), not taken on the submitted hash's word: finality ACCEPTED_ON_L1, execution SUCCEEDED, and the pool contract's own address as the emitter of ViewingKeySet, Deposit (10 STRK, matching a documented real-world reference shield of the same size), and EncNoteCreated in one call. This is the project's one real, direct pool-touching transaction — separate from, and in addition to, the 10 ProvaPass transactions above."
+    }
+  ],
   "contracts": [
     {
       "name": "STRK20 privacy pool (StarkWare, existing)",

@@ -67,6 +67,8 @@ working in the moment.
 
 For a judge who wants the full picture beyond 90 seconds — all four
 predicate types, the destination-binding demo, the reward-pool solvency
-display, and the honest trust-boundary explanation — see `STATUS.md` and
-the README's "Try the live demo" section, which cover the same flow with
+display, the honest trust-boundary explanation, and the one real, direct
+STRK20 pool transaction the team completed separately from the app
+(`0x0684bdad…fc385`, verified in `STATUS.md`) — see `STATUS.md` and the
+README's "Try the live demo" section, which cover the same flow with
 every feature included, unhurried.

@@ -1,6 +1,6 @@
 # Prova Pass — final status
 
-Last updated: 2026-08-26 · **Submission-ready.**
+Last updated: 2026-08-27 · **Submission-ready.**
 
 > **Why Provah:** it turns private eligibility into a capability — transferable,
 > optionally destination-locked, and independently verifiable by anyone — not
@@ -38,8 +38,16 @@ also runs, independently, in the connecting wallet's own browser against
 public RPC, so nobody has to take Prova's "eligible"/"not eligible" verdict
 on faith; and if the attester's key were ever misused, the maximum damage
 is a live, publicly-checkable number (the reward pool's current on-chain
-balance), not an open-ended claim. It's a primitive judges haven't seen
-elsewhere in this sprint, built honestly, and shippable today.
+balance), not an open-ended claim. And the pool-interaction question has
+moved past disclosure into evidence: alongside the ten ProvaPass
+transactions, the team completed one real, direct STRK20 pool transaction
+— a viewing-key registration and 10 STRK shield through a privacy-enabled
+wallet's Wallet API, independently verified on-chain (see "Real STRK20
+pool transaction" below) — showing the honestly-documented blocker on the
+app-side prover route doesn't mean the pool itself is unreachable, only
+that reaching it needs the route this project said it did. It's a
+primitive judges haven't seen elsewhere in this sprint, built honestly,
+and shippable today.
 
 ## Live
 
@@ -91,11 +99,58 @@ mainnet transaction requirement.
 
 **Scope note:** transactions 1–7, 9, and 10 are against `ProvaPass` (the
 contract this project built); transaction 8 is a plain ERC20 `transfer` on
-the STRK token contract, used to fund `ProvaPass`. None of the ten are
+the STRK token contract, used to fund `ProvaPass`. None of these ten are
 direct calls into the STRK20 pool contract itself — see "Attempted:
-pool-touching transactions" below for why, and the README's "What is
-private / what is not" for the full trust-boundary writeup. Prova reads the
-pool's public `Deposit` events; it does not submit transactions to it.
+pool-touching transactions" below for the full trail of why the app-side
+route is blocked, and the README's "What is private / what is not" for the
+trust-boundary writeup. Prova's backend reads the pool's public `Deposit`
+events; it does not submit transactions to it. **A separate, direct pool
+transaction does exist — see immediately below.**
+
+## Real STRK20 pool transaction (1, direct, verified)
+
+Distinct in kind from the ten above: a real, direct interaction with the
+live STRK20 pool contract itself
+(`0x040337b1af3c663e86e333bab5a4b28da8d4652a15a69beee2b677776ffe812a`),
+completed by the team through a privacy-enabled wallet using the Wallet
+API route (see "Final attempt: the Wallet API route" below for exactly
+what that route is and why Provah's own tooling can't drive it headlessly)
+— not fabricated, and not asserted on the submitted hash's word alone:
+
+| | |
+|---|---|
+| Hash | [`0x0684bdad671fb81afe3cc2c27038e867e352e3323f666e4fd967e0086fffc385`](https://voyager.online/tx/0x0684bdad671fb81afe3cc2c27038e867e352e3323f666e4fd967e0086fffc385) |
+| Block | 13929673 |
+| Status | `ACCEPTED_ON_L1`, execution `SUCCEEDED` |
+| Action | Viewing-key registration + 10 STRK shield ("enable private tokens") |
+
+**Independently verified, not taken on faith:** this repo's own read-only
+`tx-status` diagnostic (`scripts/mainnet-admin.mjs tx-status <hash>`, run
+via the same GitHub Actions runner used for every other mainnet action
+here) pulled the real transaction receipt and decoded its events by
+selector hash. The pool contract's own address is the emitter of all
+three: `ViewingKeySet` (selector `0x1321a49…4daf`), `Deposit` (selector
+`0x9149d21…92f2`, amount `0x8ac7230489e80000` = exactly 10 STRK), and
+`EncNoteCreated` (selector `0x23c2020…6ec5`) — computed independently via
+`hash.starknetKeccak` on the event names and matched against the receipt,
+not copied from anywhere. This is the exact three-event pattern
+`docs/MAINNET-DAY-0.md` and the Jalin reference implementation describe
+for a real Ready-wallet shield. The registered `user_addr` in the
+`ViewingKeySet` event is `0x011c79a4697d55de8df336b0ce9cb832af6ef442373f41c479a6af4c8a0cf258`
+— a wallet distinct from Provah's own operating account, consistent with
+this being a human-operated wallet transaction, not something Provah's
+backend or admin tooling produced.
+
+**What this does and doesn't change:** this is a real registration +
+shield into the live pool — the two actions the hackathon's own docs
+describe as needing no proof from a third-party prover, reachable once a
+privacy-enabled wallet is actually in hand. It is not a note-to-note
+private transfer, and it does not reopen the app-side route: Provah's own
+backend still cannot submit pool transactions without the unpublished
+prover URL, for exactly the reasons documented below. The two findings
+are consistent, not contradictory — the Wallet API route was always the
+one path that didn't need Provah's own prover access, and a human using
+the right wallet is precisely how it's meant to work.
 
 ## Verified: redeem now moves real value, wei-for-wei
 
@@ -357,16 +412,23 @@ specifically to test.
   secondhand evidence from GitHub search suggests either publishes an
   endpoint.
 
-**Conclusion, stated plainly: it is not currently possible, by any public or
-semi-public route, to submit a mainnet transaction that touches the live
-STRK20 pool contract's state-changing entrypoints.** The gap is real,
-current, on-chain-verified (not just doc-inferred), and not specific to this
-team — other participants hit the identical wall and got no response
-either. We did not fake a pool-touching transaction, and we stopped
-attempting further variants once the revert reason confirmed the blocker is
-structural rather than an encoding bug on our side. If the prover becomes
-reachable, the only code that changes is `src/lib/predicate.ts` (see
-README "The attester today, and what replaces it") — the contract and
+**Conclusion, scoped precisely: it is not possible for Provah's own
+backend — an app holding its own keys, with no wallet mediation — to
+submit a mainnet transaction that touches the live STRK20 pool contract's
+state-changing entrypoints.** That gap is real, current, on-chain-verified
+(not just doc-inferred), and not specific to this team — other
+participants hit the identical wall and got no response either. We did
+not fake a pool-touching transaction from this route, and we stopped
+attempting further variants once the revert reason confirmed the blocker
+is structural rather than an encoding bug on our side. **This is narrower
+than our own earlier phrasing of this conclusion** — a real pool
+transaction does exist, reached through the different route the
+hackathon's own docs name for exactly this situation (a privacy-enabled
+wallet, not an app-held prover key); see "Real STRK20 pool transaction"
+above and "Final attempt: the Wallet API route" below. If the prover
+becomes reachable to apps directly, the only code that changes is
+`src/lib/predicate.ts` (see README "The attester today, and what
+replaces it") — the contract and
 claim flow need no changes at all.
 
 ## Final attempt: the Wallet API route
@@ -429,19 +491,27 @@ actual ceiling.
 
 **Updated conclusion:** the Wallet API route is real, documented precisely
 enough to identify its exact RPC surface, and has a genuine mainnet
-precedent — it is not vaporware. But it is closed to this project for two
-independently sufficient reasons: no STRK20-capable wallet binary is
-reachable from this build environment's network, and the one public,
-buildable-from-source alternative (Argent-X) does not yet contain the
-feature. This is the last realistic angle on this axis; we're not aware of
-a fourth route to try, and we're not going to keep guessing at ones that
-don't exist.
+precedent — it is not vaporware. This build environment's own tooling
+still cannot drive it: no STRK20-capable wallet binary is reachable from
+this sandbox's network, and the one public, buildable-from-source
+alternative (Argent-X) does not yet contain the feature. But the route
+itself doesn't need this environment — it needs a human with a real
+privacy-enabled wallet, which is exactly how it's designed to work. The
+team completed one such transaction directly (see "Real STRK20 pool
+transaction" above), confirming this analysis rather than contradicting
+it: the blocker was specific to headless, environment-bound tooling, not
+to the route's existence. What remains out of reach for this project is
+still real — Provah's own backend cannot submit pool transactions or
+private note-to-note transfers without the unpublished prover URL — but
+"nobody on this team can touch the pool" is no longer the honest
+statement, and we've corrected it.
 
 ## Sprint requirements checklist
 
 - [x] Public GitHub repo with license (MIT; vendored StarkWare code keeps
       its own Apache-2.0 `LICENSE`)
-- [x] ≥3 real mainnet transactions (10, listed above)
+- [x] ≥3 real mainnet transactions (11: 10 ProvaPass + 1 direct STRK20 pool
+      transaction, both listed above)
 - [x] Live public demo URL (https://provah.vercel.app/)
 - [x] 90-second demo script (`DEMO.md`)
 - [x] Complete `strk20.json`
