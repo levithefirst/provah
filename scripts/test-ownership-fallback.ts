@@ -18,9 +18,13 @@
  *
  * Also covers the P0 hardening pass: deployment status is now determined
  * explicitly (via getClassHashAt / RPC error code 20) rather than inferred
- * from whatever verifyMessageInStarknet happens to throw, and every
- * failure is tagged with a specific stage instead of one generic 401 — see
- * OwnershipFailureStage in passChallenge.ts.
+ * from whatever verifyMessageInStarknet happens to throw, every failure is
+ * tagged with a specific stage instead of one generic 401 (see
+ * OwnershipFailureStage in passChallenge.ts), and a signature array with
+ * more than 2 elements (some wallets prepend a version byte or append
+ * guardian/session-key data) is tried as both the first-two and last-two
+ * felts rather than rejected outright — each candidate still has to pass
+ * real verification to be accepted.
  *
  * Uses only starknet.js and the real, shared verifyPassOwnership() — no
  * wallet, no database, no live RPC (fake providers below reproduce the
@@ -161,15 +165,29 @@ async function main() {
       deploymentData
     );
   });
-  await check("a 3+ element array is rejected with stage 'signature_shape', not silently truncated", async () => {
+  await check("a 3-element array with the real [r, s] as the LAST two elements still verifies", async () => {
+    // Some wallets prepend a version/scheme byte ahead of the real pair.
+    await verifyPassOwnership(undeployedProvider(), CAMPAIGN_ID, address, ["0x1", ...signature], deploymentData);
+  });
+  await check("a 3-element array with the real [r, s] as the FIRST two elements still verifies", async () => {
+    // Others append guardian/session-key data after the owner's real pair.
+    await verifyPassOwnership(undeployedProvider(), CAMPAIGN_ID, address, [...signature, "0x1"], deploymentData);
+  });
+  await check("a 3-element array where NEITHER slicing is a real signature -> stage 'offchain', not silently accepted", async () => {
     await assertRejectsWithStage(
-      verifyPassOwnership(undeployedProvider(), CAMPAIGN_ID, address, [...signature, "0x1"], deploymentData),
+      verifyPassOwnership(undeployedProvider(), CAMPAIGN_ID, address, ["0x1", "0x2", "0x3"], deploymentData),
+      "offchain"
+    );
+  });
+  await check("a single-element array is rejected with stage 'signature_shape' (too short to contain [r, s])", async () => {
+    await assertRejectsWithStage(
+      verifyPassOwnership(undeployedProvider(), CAMPAIGN_ID, address, [signature[0]], deploymentData),
       "signature_shape"
     );
   });
-  await check("a single-element array is rejected with stage 'signature_shape'", async () => {
+  await check("an empty array is rejected with stage 'signature_shape'", async () => {
     await assertRejectsWithStage(
-      verifyPassOwnership(undeployedProvider(), CAMPAIGN_ID, address, [signature[0]], deploymentData),
+      verifyPassOwnership(undeployedProvider(), CAMPAIGN_ID, address, [], deploymentData),
       "signature_shape"
     );
   });

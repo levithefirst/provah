@@ -132,28 +132,38 @@ async function isAccountDeployed(provider: RpcProvider, address: string): Promis
 }
 
 /**
- * Normalizes a wallet's wallet_signTypedData response to the plain [r, s]
- * pair every verification path here expects. Different wallets have been
- * observed to shape this differently (a bare array, or occasionally an
- * object with r/s fields) — this accepts either without guessing at
- * anything beyond that: an array with anything other than exactly two
- * elements is a signature scheme (multisig/guardian/session-key) this
- * function doesn't know how to interpret, and is rejected with a clear
- * stage rather than silently taking the first two elements and hoping.
+ * Turns a wallet's wallet_signTypedData response into one or more candidate
+ * [r, s] pairs to actually try verifying. The documented shape (per
+ * @starknet-io/types-js) is a plain 2-element felt array, or occasionally
+ * an {r, s} object — both map to exactly one candidate. A wallet has been
+ * observed to return more than 2 elements (a version/scheme prefix, or
+ * guardian/session-key data appended after the owner's [r, s]); rather than
+ * guessing which two of those elements are the real pair, this tries both
+ * plausible slicings — the LAST two elements (the more common convention:
+ * extra data prefixed) and the FIRST two — and the caller only accepts
+ * whichever one actually verifies. This never accepts a slicing "because
+ * it's plausible": every candidate still has to pass real ECDSA
+ * verification (on-chain is_valid_signature, or the off-chain check
+ * against deploymentData) to be accepted. An array too short to contain a
+ * pair, or anything else, is rejected with stage "signature_shape".
  */
-function normalizeSignature(signature: unknown): string[] {
+function candidateSignaturePairs(signature: unknown): string[][] {
   if (Array.isArray(signature)) {
-    if (signature.length !== 2) {
+    if (signature.length < 2) {
       throw new OwnershipVerificationError(
         "signature_shape",
-        `wallet returned a ${signature.length}-element signature array, expected exactly 2 ([r, s]) — this account may use a multi-signer scheme not yet supported`
+        `wallet returned a ${signature.length}-element signature array, too short to contain [r, s]`
       );
     }
-    return signature.map((v) => num.toHex(v as string));
+    const hexed = signature.map((v) => num.toHex(v as string));
+    if (hexed.length === 2) return [hexed];
+    const lastTwo = hexed.slice(-2);
+    const firstTwo = hexed.slice(0, 2);
+    return lastTwo[0] === firstTwo[0] && lastTwo[1] === firstTwo[1] ? [lastTwo] : [lastTwo, firstTwo];
   }
   if (signature && typeof signature === "object" && "r" in signature && "s" in signature) {
     const { r, s } = signature as { r: string; s: string };
-    return [num.toHex(r), num.toHex(s)];
+    return [[num.toHex(r), num.toHex(s)]];
   }
   throw new OwnershipVerificationError("signature_shape", "wallet returned a signature in an unrecognized shape");
 }
@@ -211,24 +221,26 @@ export async function verifyPassOwnership(
       `typed data failed to hash: ${err instanceof Error ? err.message : String(err)}`
     );
   }
-  const signature = normalizeSignature(signatureInput);
+  const signatureCandidates = candidateSignaturePairs(signatureInput);
 
   const deployed = await isAccountDeployed(provider, proverAddress);
 
   if (deployed) {
-    let ok: boolean;
-    try {
-      ok = await provider.verifyMessageInStarknet(message, signature, proverAddress);
-    } catch (err) {
+    let rpcError: unknown;
+    for (const candidate of signatureCandidates) {
+      try {
+        if (await provider.verifyMessageInStarknet(message, candidate, proverAddress)) return;
+      } catch (err) {
+        rpcError = err; // keep trying other candidates; report this only if none of them work
+      }
+    }
+    if (rpcError) {
       throw new OwnershipVerificationError(
         "onchain",
-        `is_valid_signature call failed: ${err instanceof Error ? err.message : String(err)}`
+        `is_valid_signature call failed: ${rpcError instanceof Error ? rpcError.message : String(rpcError)}`
       );
     }
-    if (!ok) {
-      throw new OwnershipVerificationError("onchain", "signature does not match this account's registered key");
-    }
-    return;
+    throw new OwnershipVerificationError("onchain", "signature does not match this account's registered key");
   }
 
   if (!deploymentData) {
@@ -259,10 +271,12 @@ export async function verifyPassOwnership(
     );
   }
 
-  for (const candidate of deploymentData.calldata) {
-    if (BigInt(candidate) === BigInt(0)) continue;
-    if (tryVerifyAgainstCandidateFelt(message, signature, candidate, proverAddress)) {
-      return;
+  for (const candidateFelt of deploymentData.calldata) {
+    if (BigInt(candidateFelt) === BigInt(0)) continue;
+    for (const candidateSignature of signatureCandidates) {
+      if (tryVerifyAgainstCandidateFelt(message, candidateSignature, candidateFelt, proverAddress)) {
+        return;
+      }
     }
   }
   throw new OwnershipVerificationError(
