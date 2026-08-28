@@ -7,9 +7,13 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "test": "npm run test:typed-data && npm run test:ownership-fallback",
+    "test": "npm run test:typed-data && npm run test:ownership-fallback && npm run test:predicate-math && npm run test:pass-token && npm run test:pass-decision && npm run test:claim-decision",
     "test:typed-data": "tsx scripts/test-typed-data.ts",
-    "test:ownership-fallback": "tsx scripts/test-ownership-fallback.ts"
+    "test:ownership-fallback": "tsx scripts/test-ownership-fallback.ts",
+    "test:predicate-math": "tsx scripts/test-predicate-math.ts",
+    "test:pass-token": "tsx scripts/test-pass-token.ts",
+    "test:pass-decision": "tsx scripts/test-pass-decision.ts",
+    "test:claim-decision": "tsx scripts/test-claim-decision.ts"
   },
   "dependencies": {
     "@starknet-io/get-starknet": "^4.0.8",

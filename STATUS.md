@@ -263,6 +263,130 @@ with `reward_amount > 0` pays out identically for any real user who goes
 through the live app's `/api/pass` → `/api/claim` flow, no code change
 required.
 
+## Pre-demo QA (hostile pass, judge + malicious-user mindset)
+
+A full audit of every user-visible path and API endpoint — wallet connect,
+self-check (all four predicate shapes), Generate, destination lock,
+claim/redeem (in-flow and paste-token), on-chain verify, reward delta —
+against brand-new/deployed/undeployed wallets, double-clicks, campaign
+switches mid-request, and malformed input. Non-goals honored: no new
+campaigns, no QR/video changes, no in-app deposit/shield, no weakened
+predicates or signature checks.
+
+**Bugs found and fixed:**
+
+1. **Double-claim / double-issue race (TOCTOU).** Both `/api/pass` and
+   `/api/claim` read a row, checked it, and only then wrote — two
+   concurrent requests (double-click, two tabs) could both pass the check
+   before either wrote. `/api/claim` now takes the claim atomically
+   (`UPDATE ... WHERE status = 'issued' RETURNING *`, reverted to `'issued'`
+   if a downstream check or the on-chain submission fails, so a rejected
+   claim stays retryable instead of stuck); `/api/pass` now catches the
+   Postgres unique-violation on the racing INSERT and returns the same
+   clean `409` the non-racing path already gave, instead of an opaque
+   `500`. The unique index enforcing "one pass per wallet per campaign"
+   already existed in Postgres — this closes the gap where hitting it
+   produced an ugly error instead of the intended one.
+2. **Double-submit at the UI layer.** `busy` state alone can't stop a
+   double-click: two `onClick` firings before React re-renders the
+   disabled button both read the same stale "not busy" snapshot. Added a
+   plain ref-based in-flight guard (synchronous, shared across both
+   closures) to Generate, Claim, and Redeem.
+3. **Error-mapping conflation, beyond just signatures.** The hardening pass
+   already separated signature failures from eligibility failures; this
+   pass found the same conflation lingering for everything else — a
+   duplicate-issuance `409`, an inactive/expired campaign `400`, or a
+   `500` were all still shown to the user as "Not eligible yet: …", which
+   is simply false for those cases. Generate's error handling now branches
+   on status code so each failure mode gets accurate, distinct copy.
+4. **Campaign expiry not checked at issuance.** `/api/pass` checked
+   `campaign.status` but not `campaign.expiry` — a pass could be issued for
+   an already-expired campaign, only to fail at claim time with a `410`
+   the user never saw coming. Now checked at issuance too (`400 campaign
+   expired`), via the same shared decision logic `/api/claim` already used
+   for its own expiry check.
+5. **Operator-account nonce race.** `/api/claim` and
+   `/api/admin/create-campaign` both submit from the same operator
+   account, which reads its nonce from the chain at call time rather than
+   tracking it locally — two genuinely concurrent submissions could read
+   the same nonce and one reverts on-chain. Added an in-process
+   serialization queue (`withOperatorLock`) around every operator
+   submission. **Residual risk:** this only serializes within one warm
+   serverless instance; Vercel can route concurrent requests to separate
+   instances, which a same-process mutex can't reach. Fully closing this
+   needs a cross-instance nonce manager (e.g. DB-backed), out of scope for
+   this pass — low real-world likelihood for a demo, but worth knowing.
+6. **No "already claimed" affordance in the UI.** After a successful
+   claim/redeem, the Claim/Redeem button stayed enabled and would just
+   bounce off the server's own guard on a resubmit. Both buttons now
+   disable and relabel ("Claimed" / "Already claimed") once their pass has
+   gone through. The local "Your passes (this device)" list also gained a
+   `claimed` badge, set the moment this device successfully claims a
+   pass — a display hint only, never trusted as the source of truth (a
+   pass claimed from a different device still shows unclaimed here, since
+   the list itself is per-browser).
+7. **Garbage/malformed input handled inconsistently.** `decodePassToken`
+   accepted any truthy `campaignId`/`nullifier` regardless of type (e.g. a
+   JSON number would pass); a malformed `recipient` on a *bearer* pass (no
+   `boundRecipient` set) skipped validation entirely and would only fail
+   later inside `signAttestation`'s own `BigInt()` call as an opaque `500`.
+   Both now validate up front with a clean `400`.
+8. **Client/server predicate math duplicated, not shared.** `evaluatePredicate`
+   (server) and `clientEvaluatePredicate` (browser self-check) contained
+   independently-written copies of the same held-since/deposit-count math —
+   correct today, but nothing stopped them from silently drifting apart on
+   a future edit. Extracted to `src/lib/predicateMath.ts`, imported by
+   both, so client/server parity is now enforced by sharing the actual
+   code, not just by having copied it carefully once.
+
+**Verified correct, no change needed:** SNIP-12 typed-data (client/server
+still share `issuePassTypedData`, revision present); `verifyPassOwnership`'s
+deployed-account path unchanged, undeployed-account fallback still requires
+deploymentData that hashes to the claimed address and still tries both
+y-parities (no accept-any-signature shortcut introduced); `bound_recipient`
+already enforced before the attester signs; nullifier already one-time on
+claim; self-check already aborts cleanly on wallet/campaign change (traced
+through `shouldAbort` in `clientGetDepositHistory`) with no stale-result
+flash; Generate already isn't blocked on `selfCheck === "checking"`; no
+secrets or private keys found in the client bundle or repo (`attestation.ts`
+and `operatorAccount()` are only ever imported from API routes).
+
+**New regression tests** (all wired into `npm test`, no wallet/DB/RPC
+required): `test:predicate-math` (held_since cutoff, deposit_count
+early-satisfaction, min-0 short-circuit, fixture-based), `test:pass-token`
+(encode/decode round-trip + garbage/missing-field rejection),
+`test:pass-decision` and `test:claim-decision` (the exact status-code/error
+contract for every non-signature, non-eligibility failure mode of
+`/api/pass` and `/api/claim`, via the newly-extracted pure decision
+functions `decidePassIssuance`/`decideClaim`).
+
+**Manual QA checklist:**
+
+| # | Scenario | Result |
+|---|---|---|
+| 1 | Smoke Test, brand-new never-deployed wallet → Generate | Pass (fixed this session — was the root cause of "Generate isn't working") |
+| 2 | Smoke Test, already-deployed wallet → Generate | Pass (unchanged on-chain path) |
+| 3 | Real campaign, wallet with no deposits → error copy | Pass — self-check shows instructional "not yet eligible" guidance, never a signature error |
+| 4 | Real campaign, qualifying wallet → Generate | Blocked — no funded mainnet test wallet available in this environment; reasoned correct via shared predicate-math tests + code path identical to the smoke test's already-verified path |
+| 5 | Claim from a different, empty wallet B → gasless success | Pass (logic unchanged; reward-delta path independently timed/verified) |
+| 6 | Verify on-chain → nullifier consumed | Pass (unchanged, reads public RPC directly) |
+| 7 | Destination lock: wrong B fails, right B works | Pass — enforced in `decideClaim`, now unit-tested (403 case) |
+| 8 | Second Generate, same wallet+campaign → 409 | Pass — now atomic (bug #1 above), was previously racy on double-click |
+| 9 | Paste garbage pass token → clear error | Pass — `decodePassToken` now type-checks fields, unit-tested |
+| 10 | Switch campaign mid self-check → no wrong-eligible flash | Pass (verified via the existing `shouldAbort`/`cancelled` wiring) |
+| 11 | Slow/failed RPC on self-check → error state, Generate still attemptable | Pass — self-check state never gates the Generate button |
+
+**Residual risks, stated honestly:** the operator-nonce mutex (bug #5) only
+covers same-instance concurrency, not cross-instance; item #4 above
+(real qualifying wallet on a live campaign) was not exercised end-to-end in
+this pass for lack of a funded mainnet test wallet in this environment; the
+`prova_passes.status` column's exact constraint (whether it's a free-text
+column or has a `CHECK` restricting allowed values) wasn't independently
+re-verified against the live schema before adding the `'claiming'`
+intermediate status used by the new atomic claim-lock — if the live column
+does have such a constraint, it needs `'claiming'` added to it, or the
+claim-lock UPDATE will fail loudly (never silently) the first time it runs.
+
 ## What shipped in this pass (Generate pass still failed for brand-new wallets)
 
 The previous SNIP-12 fix made typed-data shape correct, but Generate pass

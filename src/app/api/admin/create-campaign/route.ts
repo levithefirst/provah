@@ -1,6 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 import { cairo, hash, num } from "starknet";
-import { operatorAccount, provider } from "@/lib/starknet";
+import { operatorAccount, provider, withOperatorLock } from "@/lib/starknet";
 import { PROVA_PASS_ABI } from "@/lib/provaPassAbi";
 import { PROVA_PASS_CONTRACT_ADDRESS, requireAdmin } from "@/lib/config";
 import { pedersen } from "@/lib/attestation";
@@ -50,7 +50,10 @@ export async function GET(req: NextRequest) {
       rewardToken,
       cairo.uint256(rewardAmount),
     ]);
-    const { transaction_hash } = await account.execute(call);
+    // Same operator account /api/claim submits transactions from — serialize
+    // here too so an admin campaign-creation call can't race a live claim's
+    // nonce (see withOperatorLock in src/lib/starknet.ts).
+    const { transaction_hash } = await withOperatorLock(() => account.execute(call));
     await provider().waitForTransaction(transaction_hash);
 
     await db().query(

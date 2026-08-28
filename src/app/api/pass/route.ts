@@ -4,6 +4,11 @@ import { evaluatePredicate } from "@/lib/predicate";
 import { pedersen, signAttestation, deriveNullifier } from "@/lib/attestation";
 import { verifyPassOwnership, type PassDeploymentData } from "@/lib/passChallenge";
 import { provider } from "@/lib/starknet";
+import { decidePassIssuance } from "@/lib/passDecision";
+
+// Postgres error code for "unique_violation" — see the pg driver docs.
+// https://www.postgresql.org/docs/current/errcodes-appendix.html
+const PG_UNIQUE_VIOLATION = "23505";
 
 /**
  * Issue a Prova Pass: evaluate the campaign's predicate against the caller's
@@ -92,9 +97,39 @@ export async function POST(req: NextRequest) {
 
     const { rows } = await db().query(`SELECT * FROM campaigns WHERE id = $1`, [campaignId]);
     const campaign = rows[0];
-    if (!campaign) return NextResponse.json({ ok: false, error: "no such campaign" }, { status: 404 });
-    if (campaign.status !== "active") {
-      return NextResponse.json({ ok: false, error: "campaign not active" }, { status: 400 });
+
+    // Deterministic (no salt) commitment of (address, campaign) — lets us
+    // enforce "one pass per wallet per campaign" without ever storing the
+    // raw address, closing the gap where a caller could otherwise mint
+    // unlimited passes for one qualifying wallet by varying `salt` alone.
+    const addressCommitment = campaign
+      ? "0x" + pedersen(BigInt(proverAddress), BigInt(campaignId)).toString(16)
+      : null;
+    const nullifier = deriveNullifier(BigInt(campaignId), BigInt(proverAddress), BigInt(salt));
+    const nullifierHex = "0x" + nullifier.toString(16);
+
+    const [existingByNullifier, existingByWallet] = campaign
+      ? await Promise.all([
+          db().query(`SELECT 1 FROM prova_passes WHERE nullifier = $1`, [nullifierHex]),
+          db().query(`SELECT 1 FROM prova_passes WHERE campaign_id = $1 AND address_commitment = $2`, [
+            campaignId,
+            addressCommitment,
+          ]),
+        ])
+      : [null, null];
+
+    const decision = decidePassIssuance(
+      {
+        campaignExists: !!campaign,
+        campaignStatus: campaign?.status ?? null,
+        campaignExpirySec: campaign ? Number(campaign.expiry) : null,
+        nullifierAlreadyUsed: (existingByNullifier?.rows.length ?? 0) > 0,
+        alreadyIssuedForWallet: (existingByWallet?.rows.length ?? 0) > 0,
+      },
+      Math.floor(Date.now() / 1000)
+    );
+    if (!decision.ok) {
+      return NextResponse.json({ ok: false, error: decision.error }, { status: decision.status });
     }
 
     const { eligible, evidence } = await evaluatePredicate(
@@ -109,41 +144,36 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ ok: false, error: "predicate not satisfied", evidence }, { status: 403 });
     }
 
-    const nullifier = deriveNullifier(BigInt(campaignId), BigInt(proverAddress), BigInt(salt));
-    const nullifierHex = "0x" + nullifier.toString(16);
-
-    const existing = await db().query(`SELECT 1 FROM prova_passes WHERE nullifier = $1`, [nullifierHex]);
-    if (existing.rows.length > 0) {
-      return NextResponse.json({ ok: false, error: "pass already issued for this input" }, { status: 409 });
-    }
-
-    // Deterministic (no salt) commitment of (address, campaign) — lets us
-    // enforce "one pass per wallet per campaign" without ever storing the
-    // raw address, closing the gap where a caller could otherwise mint
-    // unlimited passes for one qualifying wallet by varying `salt` alone.
-    const addressCommitment = "0x" + pedersen(BigInt(proverAddress), BigInt(campaignId)).toString(16);
-    const alreadyIssued = await db().query(
-      `SELECT 1 FROM prova_passes WHERE campaign_id = $1 AND address_commitment = $2`,
-      [campaignId, addressCommitment]
-    );
-    if (alreadyIssued.rows.length > 0) {
-      return NextResponse.json(
-        { ok: false, error: "this wallet has already been issued a pass for this campaign" },
-        { status: 409 }
-      );
-    }
-
     // Commitment only — never the raw prover address — so Prova itself can't
     // later be forced to reveal which wallet satisfied the predicate.
     const issuerCommitment = "0x" + pedersen(BigInt(proverAddress), BigInt(salt)).toString(16);
 
     const expiresAt = new Date(Number(campaign.expiry) * 1000);
 
-    await db().query(
-      `INSERT INTO prova_passes (nullifier, campaign_id, predicate_hash, issuer_commitment, signature_r, signature_s, expires_at, bound_recipient, address_commitment)
-       VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
-      [nullifierHex, campaignId, campaign.predicate_hash, issuerCommitment, "0x0", "0x0", expiresAt, boundRecipient, addressCommitment]
-    );
+    try {
+      await db().query(
+        `INSERT INTO prova_passes (nullifier, campaign_id, predicate_hash, issuer_commitment, signature_r, signature_s, expires_at, bound_recipient, address_commitment)
+         VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`,
+        [nullifierHex, campaignId, campaign.predicate_hash, issuerCommitment, "0x0", "0x0", expiresAt, boundRecipient, addressCommitment]
+      );
+    } catch (err) {
+      // Closes the race the SELECT-then-INSERT checks above can't: two
+      // concurrent requests (a double-click, two tabs) can both pass the
+      // pre-checks before either has inserted. Postgres's own unique index
+      // on (campaign_id, address_commitment) — see README "one pass per
+      // wallet per campaign" — is what actually decides who wins; this just
+      // turns the loser's raw constraint-violation error into the same
+      // clean 409 the pre-check already returns for the non-racing case,
+      // instead of an opaque 500.
+      const pgCode = (err as { code?: string } | null)?.code;
+      if (pgCode === PG_UNIQUE_VIOLATION) {
+        return NextResponse.json(
+          { ok: false, error: "this wallet has already been issued a pass for this campaign" },
+          { status: 409 }
+        );
+      }
+      throw err;
+    }
 
     return NextResponse.json({
       ok: true,

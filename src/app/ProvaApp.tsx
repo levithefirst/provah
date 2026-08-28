@@ -1,9 +1,11 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { connect, disconnect, type StarknetWindowObject } from "@starknet-io/get-starknet";
 import { RpcProvider, hash, num } from "starknet";
 import { issuePassTypedData, type PassDeploymentData } from "@/lib/passChallenge";
+import { evaluateDepositCount, evaluateHeldSince, isAlwaysTruePredicate } from "@/lib/predicateMath";
+import { decodePassToken, encodePassToken } from "@/lib/passToken";
 import QRCode from "qrcode";
 import {
   AlertTriangle,
@@ -44,6 +46,12 @@ type LocalPass = {
   nullifier: string;
   createdAt: number;
   boundRecipient?: string | null;
+  // Set locally the moment this device successfully claims it — purely a
+  // display hint ("don't invite a doomed resubmit"), never trusted as the
+  // source of truth: the server's own nullifier check is what actually
+  // stops a reuse. A pass claimed from a DIFFERENT device still shows as
+  // unclaimed here, since this list is per-browser, not server-tracked.
+  claimed?: boolean;
 };
 
 const LOCAL_PASSES_KEY = "prova_local_passes_v1";
@@ -237,10 +245,9 @@ async function clientEvaluatePredicate(
   // Always-true predicates need zero RPC — most importantly the Capability
   // Smoke Test (deposit_count, minimum 0), which must resolve instantly for
   // literally any wallet, including one with no on-chain history at all.
-  if (
-    (campaign.predicate_type === "deposit_count" || campaign.predicate_type === "balance_threshold") &&
-    minAmount === BigInt(0)
-  ) {
+  // Shared with the server's identical short-circuit in predicate.ts so the
+  // two can never silently drift apart on what counts as "always eligible."
+  if (isAlwaysTruePredicate(campaign.predicate_type, minAmount)) {
     return { eligible: true, total: BigInt(0), count: 0 };
   }
 
@@ -252,18 +259,15 @@ async function clientEvaluatePredicate(
   });
 
   if (campaign.predicate_type === "deposit_count") {
-    const count = BigInt(deposits.length);
-    return { eligible: count >= minAmount, total: count, count: deposits.length };
+    const { eligible, count } = evaluateDepositCount(deposits, minAmount);
+    return { eligible, total: BigInt(count), count };
   }
 
-  const nowSec = Math.floor(Date.now() / 1000);
-  const cutoff = campaign.predicate_type === "held_since" ? nowSec - campaign.predicate_min_days * 86400 : null;
-  let running = BigInt(0);
-  for (const d of deposits) {
-    if (cutoff !== null && d.timestampSec > cutoff) continue;
-    running += d.amount;
-  }
-  return { eligible: running >= minAmount, total: running, count: deposits.length };
+  // held_since (real cutoff) and balance_threshold (minDays = 0, i.e. no
+  // cutoff in the past) — the same shared math the server uses.
+  const minDays = campaign.predicate_type === "held_since" ? campaign.predicate_min_days : 0;
+  const { eligible, total } = evaluateHeldSince(deposits, minAmount, minDays);
+  return { eligible, total, count: deposits.length };
 }
 
 function short(addr: string | null | undefined) {
@@ -342,23 +346,6 @@ function expiryLabel(c: Campaign): string {
     month: "short",
     day: "numeric",
   })}`;
-}
-
-function encodePassToken(campaignId: string, nullifier: string): string {
-  const json = JSON.stringify({ v: 1, campaignId, nullifier });
-  return typeof window === "undefined" ? "" : window.btoa(json);
-}
-
-function decodePassToken(token: string): { campaignId: string; nullifier: string } | null {
-  try {
-    const parsed = JSON.parse(window.atob(token.trim()));
-    if (parsed?.campaignId && parsed?.nullifier) {
-      return { campaignId: parsed.campaignId, nullifier: parsed.nullifier };
-    }
-    return null;
-  } catch {
-    return null;
-  }
 }
 
 function loadLocalPasses(): LocalPass[] {
@@ -504,6 +491,12 @@ export default function ProvaApp() {
   const [redeemToken, setRedeemToken] = useState("");
   const [redeemWallet, setRedeemWallet] = useState<string>("");
   const [redeemTx, setRedeemTx] = useState<string | null>(null);
+  // Which nullifier redeemTx belongs to — lets the Redeem button re-enable
+  // for a genuinely different pasted token while still refusing to resubmit
+  // the one that just succeeded (the on-chain nullifier is one-time; a
+  // resubmit would just bounce off the server's own 409, but the button
+  // should say "already used" instead of inviting the click at all).
+  const [redeemedNullifier, setRedeemedNullifier] = useState<string | null>(null);
   const [redeemStatus, setRedeemStatus] = useState<string>("");
   const [campaignsLoading, setCampaignsLoading] = useState(true);
   const [lockPass, setLockPass] = useState(false);
@@ -516,6 +509,13 @@ export default function ProvaApp() {
   const [selfCheckDetail, setSelfCheckDetail] = useState<string>("");
   const [rewardPoolBalance, setRewardPoolBalance] = useState<string | null>(null);
   const [campaignClaimCount, setCampaignClaimCount] = useState<number | null>(null);
+  // A plain ref, not state: a double-click (or Enter+click) can fire two
+  // onClick handlers before React re-renders the disabled button, so the
+  // `busy` state alone can't prevent double-submission — both handler
+  // invocations would read the same stale, not-yet-busy snapshot of state.
+  // A ref mutation is synchronous and shared across both closures, so the
+  // second call sees the first call's guard immediately, in the same tick.
+  const actionInFlightRef = useRef(false);
 
   useEffect(() => {
     setLocalPasses(loadLocalPasses());
@@ -641,6 +641,14 @@ export default function ProvaApp() {
     saveLocalPasses(updated);
   }
 
+  function markLocalPassClaimed(nullifier: string) {
+    setLocalPasses((prev) => {
+      const updated = prev.map((p) => (p.nullifier === nullifier ? { ...p, claimed: true } : p));
+      saveLocalPasses(updated);
+      return updated;
+    });
+  }
+
   async function handleConnectProver() {
     try {
       const handle = await connectWalletHandle();
@@ -659,6 +667,8 @@ export default function ProvaApp() {
       setStatus("Enter the wallet address to lock this pass to, or turn off locking.");
       return;
     }
+    if (actionInFlightRef.current) return; // guards against a double-click firing this twice
+    actionInFlightRef.current = true;
     setBusyAction("generate");
     setStatus("Confirm in your wallet: proving you control this address…");
     try {
@@ -700,16 +710,26 @@ export default function ProvaApp() {
       });
       const data = await res.json();
       if (!res.ok) {
-        // Distinct from "not eligible": this means the wallet's signature
-        // itself couldn't be verified — a crypto/typed-data problem, not a
-        // predicate one. Conflating the two once made a broken typed-data
-        // shape look identical to "not eligible" on screen, even though
-        // eligibility was never actually checked.
-        setStatus(
-          data.error === "invalid_ownership_signature"
-            ? "Wallet signature could not be verified. Refresh and try Generate again — this is not an eligibility failure."
-            : `Not eligible yet: ${data.error}`
-        );
+        // Every failure mode below is deliberately worded differently:
+        // conflating any of them under one banner ("not eligible") once
+        // made a broken typed-data shape look identical to "not eligible"
+        // on screen, even though eligibility was never actually checked.
+        // Only a genuine 403 (predicate not satisfied) is really about
+        // eligibility — a signature problem, a duplicate-issuance, an
+        // inactive/expired campaign, or a server error are all something
+        // else, and telling a judge "not eligible" for any of those is
+        // simply false.
+        if (data.error === "invalid_ownership_signature") {
+          setStatus("Wallet signature could not be verified. Refresh and try Generate again — this is not an eligibility failure.");
+        } else if (res.status === 403) {
+          setStatus(`Not eligible yet: ${data.error}`);
+        } else if (res.status === 409) {
+          setStatus(`Already issued: ${data.error}`);
+        } else if (res.status === 400 || res.status === 404) {
+          setStatus(`This campaign can't issue a pass right now: ${data.error}`);
+        } else {
+          setStatus(`Provah couldn't process this: ${data.error}`);
+        }
         setPass(null);
       } else {
         const newPass: LocalPass = {
@@ -733,6 +753,7 @@ export default function ProvaApp() {
     } catch {
       setStatus("Wallet declined to sign, or Provah was unreachable.");
     } finally {
+      actionInFlightRef.current = false;
       setBusyAction("idle");
     }
   }
@@ -747,7 +768,9 @@ export default function ProvaApp() {
   }
 
   async function handleClaim() {
-    if (!campaign || !pass || !claimWallet) return;
+    if (!campaign || !pass || !claimWallet || claimTx) return;
+    if (actionInFlightRef.current) return; // guards against a double-click firing this twice
+    actionInFlightRef.current = true;
     setBusyAction("claim");
     setClaimVerify("idle");
     setClaimBalanceDelta(null);
@@ -771,6 +794,7 @@ export default function ProvaApp() {
         setStatus(`Claim failed: ${data.error}`);
       } else {
         setClaimTx(data.txHash);
+        markLocalPassClaimed(pass.nullifier);
         setStatus("Claimed. The nullifier is now consumed, this pass cannot be reused.");
         if (hasReward && before !== null) {
           const after = await fetchStrkBalance(claimWallet).catch(() => null);
@@ -783,6 +807,7 @@ export default function ProvaApp() {
     } catch {
       setStatus("Failed to reach Provah.");
     } finally {
+      actionInFlightRef.current = false;
       setBusyAction("idle");
     }
   }
@@ -813,6 +838,9 @@ export default function ProvaApp() {
       setRedeemStatus("Paste a valid pass token and connect a wallet first.");
       return;
     }
+    if (decoded.nullifier === redeemedNullifier) return; // already claimed this exact token — see the button's own disabled state
+    if (actionInFlightRef.current) return; // guards against a double-click firing this twice
+    actionInFlightRef.current = true;
     setBusyAction("redeem");
     setRedeemVerify("idle");
     setRedeemBalanceDelta(null);
@@ -837,6 +865,8 @@ export default function ProvaApp() {
         setRedeemStatus(`Claim failed: ${data.error}`);
       } else {
         setRedeemTx(data.txHash);
+        setRedeemedNullifier(decoded.nullifier);
+        markLocalPassClaimed(decoded.nullifier); // a no-op unless this device is also the one that generated it
         setRedeemStatus("Claimed. This pass token is now worthless to anyone else, the nullifier is consumed.");
         if (hasReward && before !== null) {
           const after = await fetchStrkBalance(redeemWallet).catch(() => null);
@@ -849,6 +879,7 @@ export default function ProvaApp() {
     } catch {
       setRedeemStatus("Failed to reach Provah.");
     } finally {
+      actionInFlightRef.current = false;
       setBusyAction("idle");
     }
   }
@@ -1152,7 +1183,7 @@ export default function ProvaApp() {
         )}
         <button
           onClick={handleClaim}
-          disabled={busy || !pass || !claimWallet}
+          disabled={busy || !pass || !claimWallet || !!claimTx}
           className="inline-flex items-center gap-2 self-start rounded-md border border-neutral-400 px-4 py-2.5 text-neutral-900 transition-all duration-150 hover:-translate-y-0.5 hover:border-neutral-600 active:translate-y-0 active:scale-[0.97] disabled:pointer-events-none disabled:opacity-40 dark:border-neutral-600 dark:text-neutral-100 dark:hover:border-neutral-400"
         >
           {busyAction === "claim" ? (
@@ -1160,7 +1191,7 @@ export default function ProvaApp() {
           ) : (
             <Send className="h-4 w-4" strokeWidth={1.75} />
           )}
-          {busyAction === "claim" ? "Claiming…" : "Claim"}
+          {busyAction === "claim" ? "Claiming…" : claimTx ? "Claimed" : "Claim"}
         </button>
         {claimTx && (
           <div className="animate-rise-in flex flex-col gap-2">
@@ -1243,7 +1274,7 @@ export default function ProvaApp() {
                 key={p.nullifier}
                 className="flex flex-wrap items-center justify-between gap-3 rounded-md border border-neutral-200 px-3 py-2.5 text-sm transition-colors hover:border-neutral-300 dark:border-neutral-800 dark:hover:border-neutral-700"
               >
-                <span className="flex items-center gap-2">
+                <span className="flex flex-wrap items-center gap-2">
                   {p.campaignName}
                   {p.boundRecipient ? (
                     <span className="inline-flex items-center gap-1 rounded-full border border-accent/50 px-2 py-0.5 text-[10px] text-accent-ink">
@@ -1252,6 +1283,14 @@ export default function ProvaApp() {
                   ) : (
                     <span className="inline-flex items-center gap-1 rounded-full border border-amber-300 px-2 py-0.5 text-[10px] text-amber-700 dark:border-amber-800 dark:text-amber-300">
                       <Ticket className="h-2.5 w-2.5" strokeWidth={2} /> bearer
+                    </span>
+                  )}
+                  {p.claimed && (
+                    <span
+                      title="Claimed from this device — the server's own nullifier check is what actually stops a reuse, this is just a local reminder."
+                      className="inline-flex items-center gap-1 rounded-full border border-emerald-300 px-2 py-0.5 text-[10px] text-emerald-700 dark:border-emerald-800 dark:text-emerald-300"
+                    >
+                      <CheckCircle2 className="h-2.5 w-2.5" strokeWidth={2} /> claimed
                     </span>
                   )}
                 </span>
@@ -1287,7 +1326,9 @@ export default function ProvaApp() {
         </div>
         <button
           onClick={handleRedeem}
-          disabled={busy || !redeemToken || !redeemWallet}
+          disabled={
+            busy || !redeemToken || !redeemWallet || decodePassToken(redeemToken)?.nullifier === redeemedNullifier
+          }
           className="inline-flex items-center gap-2 self-start rounded-md border border-neutral-400 px-4 py-2.5 text-neutral-900 transition-all duration-150 hover:-translate-y-0.5 hover:border-neutral-600 active:translate-y-0 active:scale-[0.97] disabled:pointer-events-none disabled:opacity-40 dark:border-neutral-600 dark:text-neutral-100 dark:hover:border-neutral-400"
         >
           {busyAction === "redeem" ? (
@@ -1295,7 +1336,11 @@ export default function ProvaApp() {
           ) : (
             <Send className="h-4 w-4" strokeWidth={1.75} />
           )}
-          {busyAction === "redeem" ? "Redeeming…" : "Redeem"}
+          {busyAction === "redeem"
+            ? "Redeeming…"
+            : decodePassToken(redeemToken)?.nullifier === redeemedNullifier
+              ? "Already claimed"
+              : "Redeem"}
         </button>
         {redeemStatus && <p className="animate-rise-in text-sm text-neutral-600 dark:text-neutral-400">{redeemStatus}</p>}
         {redeemTx && (

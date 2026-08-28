@@ -1,6 +1,7 @@
 import { hash, num } from "starknet";
 import { provider } from "./starknet";
 import { STRK20_POOL_ADDRESS } from "./config";
+import { evaluateDepositCount as computeDepositCount, evaluateHeldSince, isAlwaysTruePredicate } from "./predicateMath";
 
 /**
  * Reads the STRK20 pool's public `Deposit` events for a given address.
@@ -60,21 +61,11 @@ export async function evaluateHeldSinceDays(
   minAmount: bigint,
   minDays: number
 ): Promise<{ eligible: boolean; evidence: DepositRecord[] }> {
-  const deposits = (await getDepositHistory(userAddress)).filter(
-    (d) => d.token.toLowerCase() === tokenAddress.toLowerCase()
-  );
-  const nowSec = Math.floor(Date.now() / 1000);
-  const cutoff = nowSec - minDays * 86400;
-
-  let running = BigInt(0);
-  const evidence: DepositRecord[] = [];
-  for (const d of deposits.sort((a, b) => a.timestampSec - b.timestampSec)) {
-    if (d.timestampSec > cutoff) continue; // must have been deposited before the cutoff
-    running += d.amount;
-    evidence.push(d);
-  }
-
-  return { eligible: running >= minAmount, evidence };
+  const deposits = (await getDepositHistory(userAddress))
+    .filter((d) => d.token.toLowerCase() === tokenAddress.toLowerCase())
+    .sort((a, b) => a.timestampSec - b.timestampSec);
+  const { eligible, evidence } = evaluateHeldSince(deposits, minAmount, minDays);
+  return { eligible, evidence };
 }
 
 /**
@@ -107,7 +98,8 @@ export async function evaluateDepositCount(
   const deposits = (await getDepositHistory(userAddress)).filter(
     (d) => d.token.toLowerCase() === tokenAddress.toLowerCase()
   );
-  return { eligible: BigInt(deposits.length) >= minCount, evidence: deposits };
+  const { eligible } = computeDepositCount(deposits, minCount);
+  return { eligible, evidence: deposits };
 }
 
 export type PredicateType = "held_since" | "balance_threshold" | "deposit_count";
@@ -122,9 +114,10 @@ export async function evaluatePredicate(
   // Always-true predicates (the Capability Smoke Test: deposit_count with a
   // minimum of 0, or any amount-based predicate with a minimum of 0) need no
   // deposit history at all — mirrors the same short-circuit in
-  // ProvaApp.tsx's clientEvaluatePredicate so /api/pass doesn't burn an RPC
-  // round trip re-deriving an answer that's already known.
-  if ((predicateType === "deposit_count" || predicateType === "balance_threshold") && minAmount === BigInt(0)) {
+  // ProvaApp.tsx's clientEvaluatePredicate (both call the same
+  // isAlwaysTruePredicate in predicateMath.ts) so /api/pass doesn't burn an
+  // RPC round trip re-deriving an answer that's already known.
+  if (isAlwaysTruePredicate(predicateType, minAmount)) {
     return { eligible: true, evidence: [] };
   }
   switch (predicateType) {
