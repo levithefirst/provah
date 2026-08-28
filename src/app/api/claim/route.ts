@@ -3,7 +3,7 @@ import { Contract } from "starknet";
 import { db } from "@/lib/db";
 import { operatorAccount, provider, withOperatorLock } from "@/lib/starknet";
 import { PROVA_PASS_ABI } from "@/lib/provaPassAbi";
-import { PROVA_PASS_CONTRACT_ADDRESS } from "@/lib/config";
+import { PROVA_PASS_CONTRACT_ADDRESS, PROVA_ATTESTER_PRIVATE_KEY, STARKNET_ACCOUNT_ADDRESS, STARKNET_PRIVATE_KEY } from "@/lib/config";
 import { signAttestation } from "@/lib/attestation";
 import { decideClaim } from "@/lib/claimDecision";
 
@@ -36,6 +36,36 @@ export async function POST(req: NextRequest) {
     if (!PROVA_PASS_CONTRACT_ADDRESS) {
       return NextResponse.json({ ok: false, error: "contract not deployed yet" }, { status: 503 });
     }
+    // Checked before any DB status transition — a missing attester key
+    // used to throw from signAttestation() *after* the pass was already
+    // locked to 'claiming', with nothing downstream to unlock it: every
+    // claim attempt failed the same way and permanently stuck the pass.
+    // Failing here means the pass is never touched at all when Prova
+    // itself isn't configured to sign.
+    if (!PROVA_ATTESTER_PRIVATE_KEY) {
+      console.error("[/api/claim] PROVA_ATTESTER_PRIVATE_KEY is not set — refusing before touching the pass");
+      return NextResponse.json(
+        {
+          ok: false,
+          error: "attester_not_configured",
+          detail:
+            "PROVA_ATTESTER_PRIVATE_KEY is not set on the server. Set it in Vercel env (must match the on-chain ProvaPass attester) and redeploy.",
+        },
+        { status: 503 }
+      );
+    }
+    if (!STARKNET_ACCOUNT_ADDRESS || !STARKNET_PRIVATE_KEY) {
+      console.error("[/api/claim] STARKNET_ACCOUNT_ADDRESS/STARKNET_PRIVATE_KEY not set — refusing before touching the pass");
+      return NextResponse.json(
+        {
+          ok: false,
+          error: "operator_not_configured",
+          detail:
+            "STARKNET_ACCOUNT_ADDRESS / STARKNET_PRIVATE_KEY are not set on the server. Set them in Vercel env (the account that sponsors claim gas) and redeploy.",
+        },
+        { status: 503 }
+      );
+    }
 
     // Atomic compare-and-swap: a plain SELECT-then-check here would let two
     // concurrent claims for the same pass (a double-click, two tabs, or a
@@ -46,13 +76,28 @@ export async function POST(req: NextRequest) {
     // UPDATE only ever succeeds for exactly one concurrent caller; anyone
     // else gets zero rows back and a clean 409 below, before any signature
     // is even computed.
+    //
+    // Also re-locks a STALE 'claiming' row (older than CLAIMING_TTL) as if
+    // it were 'issued'. try/catch alone can revert a failed claim back to
+    // 'issued', but can't protect against the serverless function itself
+    // being killed mid-request (a Vercel timeout while awaiting on-chain
+    // confirmation, which can take longer than a function's time budget) —
+    // there's no code left running at that point to call unlock(). This is
+    // the fallback for exactly that case: "pass already claiming" only
+    // blocks a request that's genuinely still in flight, not one that died
+    // silently minutes ago.
+    const CLAIMING_TTL_SECONDS = 120;
     let locked;
     try {
       locked = await db().query(
-        `UPDATE prova_passes SET status = 'claiming'
-         WHERE nullifier = $1 AND campaign_id = $2 AND status = 'issued'
+        `UPDATE prova_passes SET status = 'claiming', claiming_at = now()
+         WHERE nullifier = $1 AND campaign_id = $2
+           AND (
+             status = 'issued'
+             OR (status = 'claiming' AND (claiming_at IS NULL OR claiming_at < now() - make_interval(secs => $3)))
+           )
          RETURNING *`,
-        [nullifier, campaignId]
+        [nullifier, campaignId, CLAIMING_TTL_SECONDS]
       );
     } catch (err) {
       // Fails loudly and specifically rather than as an opaque 500: if the
@@ -88,9 +133,10 @@ export async function POST(req: NextRequest) {
     // claim can be retried instead of leaving the pass permanently stuck —
     // only ever called before any on-chain submission happens.
     async function unlock() {
-      await db().query(`UPDATE prova_passes SET status = 'issued' WHERE nullifier = $1 AND status = 'claiming'`, [
-        nullifier,
-      ]);
+      await db().query(
+        `UPDATE prova_passes SET status = 'issued', claiming_at = NULL WHERE nullifier = $1 AND status = 'claiming'`,
+        [nullifier]
+      );
     }
 
     // The contract already enforces campaign expiry on-chain
@@ -114,7 +160,26 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ ok: false, error: decision.error }, { status: decision.status });
     }
 
-    const sig = signAttestation(BigInt(campaignId), BigInt(nullifier), BigInt(recipient));
+    // Guarded on its own: this is exactly the call that used to throw
+    // "PROVA_ATTESTER_PRIVATE_KEY not configured" *after* the lock above
+    // had already set status = 'claiming', with no unlock reachable from
+    // here — every retry hit the same throw and the pass was stuck for
+    // good. The upfront config check further up should make this
+    // unreachable in practice, but this stays guarded regardless: nothing
+    // between acquiring the lock and a confirmed on-chain result should be
+    // able to leave the pass stuck.
+    let sig: { r: string; s: string };
+    try {
+      sig = signAttestation(BigInt(campaignId), BigInt(nullifier), BigInt(recipient));
+    } catch (err) {
+      await unlock();
+      const detail = err instanceof Error ? err.message : String(err);
+      console.error("[/api/claim] signAttestation failed after acquiring the claim lock — unlocked:", detail);
+      return NextResponse.json(
+        { ok: false, error: "attester_not_configured", detail },
+        { status: 503 }
+      );
+    }
 
     let transaction_hash: string;
     try {
@@ -144,17 +209,40 @@ export async function POST(req: NextRequest) {
       throw err;
     }
 
-    await db().query(
-      `INSERT INTO claims (campaign_id, nullifier, recipient, tx_hash, status, confirmed_at)
-       VALUES ($1,$2,$3,$4,'confirmed', now())`,
-      [campaignId, nullifier, recipient, transaction_hash]
-    );
-    await db().query(`UPDATE prova_passes SET status = 'claimed' WHERE nullifier = $1`, [nullifier]);
-    await db().query(`INSERT INTO mainnet_activity_log (kind, tx_hash, detail) VALUES ($1,$2,$3)`, [
-      "claim",
-      transaction_hash,
-      JSON.stringify({ campaignId, nullifier, recipient }),
-    ]);
+    // The on-chain claim already succeeded and the nullifier is already
+    // consumed on-chain by this point — nothing below this line may ever
+    // turn this response into a failure or call unlock(). Reverting status
+    // to 'issued' after a real on-chain success would invite a doomed
+    // retry (the contract will reject the already-consumed nullifier), and
+    // reporting a 500 for a claim that actually went through is worse than
+    // the bug this whole route was rewritten to fix. Status update to
+    // 'claimed' is the one still-important state transition; the claims
+    // row and activity log are best-effort telemetry.
+    try {
+      await db().query(`UPDATE prova_passes SET status = 'claimed' WHERE nullifier = $1`, [nullifier]);
+    } catch (err) {
+      console.error(
+        "[/api/claim] on-chain claim succeeded but updating status to 'claimed' failed (nullifier is still consumed on-chain):",
+        err instanceof Error ? err.message : String(err)
+      );
+    }
+    try {
+      await db().query(
+        `INSERT INTO claims (campaign_id, nullifier, recipient, tx_hash, status, confirmed_at)
+         VALUES ($1,$2,$3,$4,'confirmed', now())`,
+        [campaignId, nullifier, recipient, transaction_hash]
+      );
+      await db().query(`INSERT INTO mainnet_activity_log (kind, tx_hash, detail) VALUES ($1,$2,$3)`, [
+        "claim",
+        transaction_hash,
+        JSON.stringify({ campaignId, nullifier, recipient }),
+      ]);
+    } catch (err) {
+      console.error(
+        "[/api/claim] on-chain claim succeeded but a bookkeeping insert failed:",
+        err instanceof Error ? err.message : String(err)
+      );
+    }
 
     return NextResponse.json({ ok: true, txHash: transaction_hash });
   } catch (err) {

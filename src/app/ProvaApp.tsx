@@ -6,6 +6,7 @@ import { RpcProvider, hash, num } from "starknet";
 import { issuePassTypedData, normalizePassDeploymentData, type PassDeploymentData } from "@/lib/passChallenge";
 import { evaluateDepositCount, evaluateHeldSince, isAlwaysTruePredicate } from "@/lib/predicateMath";
 import { decodePassToken, encodePassToken } from "@/lib/passToken";
+import { claimFailureMessage } from "@/lib/claimCopy";
 import QRCode from "qrcode";
 import {
   AlertTriangle,
@@ -884,7 +885,7 @@ export default function ProvaApp() {
       ]);
       const data = await res.json();
       if (!res.ok) {
-        setStatus(`Claim failed: ${data.error}`);
+        setStatus(claimFailureMessage(res.status, data));
       } else {
         setClaimTx(data.txHash);
         markLocalPassClaimed(pass.nullifier);
@@ -955,7 +956,7 @@ export default function ProvaApp() {
       ]);
       const data = await res.json();
       if (!res.ok) {
-        setRedeemStatus(`Claim failed: ${data.error}`);
+        setRedeemStatus(claimFailureMessage(res.status, data));
       } else {
         setRedeemTx(data.txHash);
         setRedeemedNullifier(decoded.nullifier);

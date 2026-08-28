@@ -425,6 +425,79 @@ transaction first, then Generate," which still requires no in-app
 shield/deposit and no weakened check) — read that stage before changing
 anything further.
 
+## P0: attester key missing + "pass already claiming" stuck state (fixed)
+
+**Symptoms in production:** the first claim attempt on a pass failed with
+`PROVA_ATTESTER_PRIVATE_KEY not configured` (from `signAttestation` in
+`src/lib/attestation.ts`, because that env var was never set in Vercel).
+Every retry after that failed differently — `Claim failed: pass already
+claiming` — and the pass was permanently stuck: not claimed, but unable to
+be claimed either.
+
+**Root cause:** `src/app/api/claim/route.ts` transitioned the pass
+`issued` → `claiming` in the DB *before* calling `signAttestation()`, with
+no `try/catch` around that call that could roll the status back. The first
+failure left the row parked in `claiming` forever; every subsequent
+request hit the same atomic-lock `UPDATE ... WHERE status = 'issued'`,
+matched zero rows, and returned the generic "already claiming" 409 —
+indistinguishable from a request that was genuinely still in flight.
+
+**Fix (code):**
+- `PROVA_ATTESTER_PRIVATE_KEY` and `STARKNET_ACCOUNT_ADDRESS` /
+  `STARKNET_PRIVATE_KEY` are now checked *before* the DB lock is ever
+  acquired. Missing either returns a clean 503 (`attester_not_configured`
+  / `operator_not_configured`) with a detail string naming the exact env
+  var — no DB status transition, no nullifier touched.
+- `signAttestation()` is now wrapped in its own `try/catch` that unlocks
+  the pass (`claiming` → `issued`) on failure, as defense-in-depth in case
+  the upfront check is ever bypassed.
+- Every other failure path between acquiring the lock and a confirmed
+  on-chain result (predicate/expiry/recipient rejection, on-chain
+  submission failure) now also unlocks before returning, so a failed claim
+  is always retryable rather than stuck.
+- New `claiming_at` timestamp column + a 120-second TTL folded into the
+  lock's `UPDATE ... WHERE` clause: a `claiming` row older than the TTL is
+  treated as re-claimable, exactly like `issued`. This covers the one
+  failure mode `try/catch` can't reach — a Vercel function timeout killing
+  the process mid-`await provider().waitForTransaction(...)`, where no
+  code is left running to call `unlock()`. "Pass already claiming" now
+  only ever applies to a request that's genuinely still in flight.
+- Post-success bookkeeping (`status = 'claimed'`, `INSERT INTO claims`,
+  activity log) is now independently try/caught: once the on-chain
+  transaction confirms, nothing downstream can turn that into a 500 or an
+  unlock — the nullifier is already consumed on-chain regardless of what
+  Prova's own DB does afterward.
+- Client-side (`src/lib/claimCopy.ts`, unit-tested in
+  `scripts/test-claim-copy.ts`): `attester_not_configured` /
+  `operator_not_configured` now render as a distinct "Provah's server
+  isn't configured" message with the server's detail text, not a generic
+  "Claim failed"; "already claiming" now says a claim is genuinely in
+  progress and to retry shortly; "already claimed" says the pass is done,
+  not failed. Both `handleClaim` and `handleRedeem` in `ProvaApp.tsx`
+  already cleared local busy/claiming state on any error in their
+  `finally` blocks, so no refresh is needed to retry after a real fix.
+
+**Production recovery performed:** one pass was found stuck in `claiming`
+in the live DB — nullifier `0x635163548a54b4c13c2b32109c83be052f494801f1db8214a4cb1565cd9ebf7`,
+campaign "Capability Smoke Test". Verified via the `claims` table that no
+successful on-chain claim exists for this nullifier, then reset it to
+`issued` (`claiming_at` cleared) so it's claimable again. No other rows
+were touched; nothing in `claims` was modified or deleted.
+
+**Human ops step — cannot be done from git, requires a Vercel operator:**
+set `PROVA_ATTESTER_PRIVATE_KEY` in Vercel → Project → Settings →
+Environment Variables (Production), matching the private key whose public
+half is baked into the deployed ProvaPass contract as the attester. Also
+confirm `STARKNET_ACCOUNT_ADDRESS` and `STARKNET_PRIVATE_KEY` (the gas-
+sponsor account for claim transactions) are set. Redeploy after saving.
+Without this, every claim will keep failing with the clean 503 above —
+by design, that failure no longer touches the pass at all, but the
+underlying misconfiguration still needs a human to fix in Vercel.
+
+**Non-goals honored:** no hardcoded keys anywhere in the repo, no
+skipping attestation signing, no weakening of nullifier one-time
+semantics, no new product features.
+
 ## Pre-demo QA (hostile pass, judge + malicious-user mindset)
 
 A full audit of every user-visible path and API endpoint — wallet connect,
