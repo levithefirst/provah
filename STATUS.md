@@ -263,6 +263,39 @@ with `reward_amount > 0` pays out identically for any real user who goes
 through the live app's `/api/pass` → `/api/claim` flow, no code change
 required.
 
+## What shipped in this pass (Generate pass still failed for brand-new wallets)
+
+The previous SNIP-12 fix made typed-data shape correct, but Generate pass
+was still failing — for a specific, high-value case: a wallet that has
+never sent a transaction. Starknet accounts are counterfactual until their
+first transaction, so `/api/pass`'s ownership check (which calls
+`is_valid_signature` on the account contract) had no contract to call —
+exactly the wallet the Capability Smoke Test advertises as sufficient
+("any wallet qualifies, including a brand-new, empty one").
+
+- **`verifyPassOwnership`** (`src/lib/passChallenge.ts`) now falls back to
+  an off-chain check when the on-chain call fails because the account
+  isn't deployed yet: the client sends the wallet's own
+  `wallet_deploymentData` (salt, class hash, constructor calldata)
+  alongside the signature; the server first confirms that data actually
+  hashes to the claimed address (closing the obvious forgery — someone
+  substituting a public key they control), then verifies the signature
+  cryptographically against the calldata. Caught and fixed along the way:
+  account contracts store only the public key's x-coordinate, but
+  starknet.js's off-chain verify needs the full curve point — the fallback
+  reconstructs both possible y-parities and accepts whichever one matches.
+- **`ProvaApp.tsx`** best-effort fetches `wallet_deploymentData` after
+  signing (a no-op for any already-deployed wallet, which just rejects the
+  request) and includes it in the `/api/pass` call.
+- **Added `npm run test:ownership-fallback`**: positive case (counterfactual
+  account, real signature, real deploymentData), and three negatives —
+  no deploymentData, forged deploymentData claiming someone else's
+  address, and a signature from the wrong key — using only starknet.js and
+  the real shared functions, no wallet or live RPC.
+- On-chain verification for already-deployed wallets is unchanged; nothing
+  about signature strength was weakened, this only adds a second valid way
+  to prove the same thing for a wallet the chain has no contract for yet.
+
 ## What shipped in this pass (self-check + RPC speed, no behavior changes)
 
 The client-side self-check (independent re-derivation of eligibility
@@ -881,6 +914,18 @@ verification before any predicate is ever evaluated, and `/api/pass` now
 returns a distinct `invalid_ownership_signature` (401) for exactly this
 case so it isn't mistaken for "not eligible." Run `npm run test:typed-data`
 to check this in isolation, no wallet or RPC required.
+
+If **Generate pass fails only for brand-new wallets** (a wallet that has
+never sent a transaction), the cause is different: Starknet accounts are
+counterfactual until deployed, so `is_valid_signature` has no contract to
+call yet. `src/lib/passChallenge.ts`'s `verifyPassOwnership` handles this
+by falling back to an off-chain check using the wallet's own
+`wallet_deploymentData` — verifying the signature isn't enough on its own,
+since account contracts store only the public key's x-coordinate, not the
+full curve point starknet.js's verifier needs; the fallback reconstructs
+both possible y-parities and accepts whichever one matches. Run
+`npm run test:ownership-fallback` to check this in isolation, no wallet or
+RPC required.
 
 ## Architecture
 

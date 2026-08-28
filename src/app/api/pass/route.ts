@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { evaluatePredicate } from "@/lib/predicate";
 import { pedersen, signAttestation, deriveNullifier } from "@/lib/attestation";
-import { issuePassTypedData } from "@/lib/passChallenge";
+import { verifyPassOwnership, type PassDeploymentData } from "@/lib/passChallenge";
 import { provider } from "@/lib/starknet";
 
 /**
@@ -32,6 +32,10 @@ export async function POST(req: NextRequest) {
     // not just a bearer-security disclaimer. Enforced server-side in
     // /api/claim before the attester ever signs a different recipient.
     const boundRecipient: string | null = body.boundRecipient || null;
+    // Only needed for a wallet that has never transacted on-chain yet (see
+    // verifyPassOwnership) — omitted entirely for any already-deployed
+    // wallet, which is verified the normal on-chain way.
+    const deploymentData: PassDeploymentData | null = body.deploymentData ?? null;
 
     if (!campaignId || !proverAddress) {
       return NextResponse.json({ ok: false, error: "campaignId and proverAddress required" }, { status: 400 });
@@ -60,11 +64,7 @@ export async function POST(req: NextRequest) {
     // eligibility was ever checked.
     let controlsAddress: boolean;
     try {
-      controlsAddress = await provider().verifyMessageInStarknet(
-        issuePassTypedData(campaignId),
-        signature,
-        proverAddress
-      );
+      controlsAddress = await verifyPassOwnership(provider(), campaignId, proverAddress, signature, deploymentData);
     } catch (err) {
       console.error(
         "[/api/pass] ownership signature verification threw (typed-data/schema/RPC error, not an eligibility failure):",

@@ -7,8 +7,9 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "test": "npm run test:typed-data",
-    "test:typed-data": "tsx scripts/test-typed-data.ts"
+    "test": "npm run test:typed-data && npm run test:ownership-fallback",
+    "test:typed-data": "tsx scripts/test-typed-data.ts",
+    "test:ownership-fallback": "tsx scripts/test-ownership-fallback.ts"
   },
   "dependencies": {
     "@starknet-io/get-starknet": "^4.0.8",

@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { connect, disconnect, type StarknetWindowObject } from "@starknet-io/get-starknet";
 import { RpcProvider, hash, num } from "starknet";
-import { issuePassTypedData } from "@/lib/passChallenge";
+import { issuePassTypedData, type PassDeploymentData } from "@/lib/passChallenge";
 import QRCode from "qrcode";
 import {
   AlertTriangle,
@@ -669,6 +669,23 @@ export default function ProvaApp() {
         type: "wallet_signTypedData",
         params: issuePassTypedData(campaign.id),
       })) as string[];
+      // Starknet accounts are counterfactual until their first transaction —
+      // a genuinely fresh wallet (exactly what the Capability Smoke Test
+      // invites) has no deployed contract yet for Provah's server-side
+      // is_valid_signature check to call. Best-effort: an already-deployed
+      // wallet rejects this request (ACCOUNT_ALREADY_DEPLOYED), which is
+      // fine — the server verifies those the normal on-chain way.
+      let deploymentData: PassDeploymentData | null = null;
+      try {
+        const dd = (await proverWalletHandle.request({ type: "wallet_deploymentData" })) as {
+          class_hash: string;
+          salt: string;
+          calldata: string[];
+        };
+        deploymentData = { classHash: dd.class_hash, salt: dd.salt, calldata: dd.calldata };
+      } catch {
+        deploymentData = null;
+      }
       setStatus("Issuing pass…");
       const res = await fetch("/api/pass", {
         method: "POST",
@@ -677,6 +694,7 @@ export default function ProvaApp() {
           campaignId: campaign.id,
           proverAddress: proverWallet,
           signature,
+          deploymentData,
           boundRecipient: lockPass ? lockRecipient.trim() : undefined,
         }),
       });
