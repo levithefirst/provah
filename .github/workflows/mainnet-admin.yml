@@ -20,8 +20,11 @@ on:
           - pool-register
           - fund-contract
           - tx-status
+          - generate-attester-key
+          - get-attester
+          - set-attester
       arg1:
-        description: "create-campaign: name | claim: campaignId"
+        description: "create-campaign: name | claim: campaignId | set-attester: new attester pubkey (hex)"
         required: false
       arg2:
         description: "create-campaign: asset address | claim: nullifier"

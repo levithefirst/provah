@@ -425,6 +425,54 @@ transaction first, then Generate," which still requires no in-app
 shield/deposit and no weakened check) — read that stage before changing
 anything further.
 
+## Ops: recovering a lost/never-set PROVA_ATTESTER_PRIVATE_KEY
+
+Confirmed live in production: Generate issues passes fine (a new row lands
+in `prova_passes` every time), but Claim fails clean with the 503
+`attester_not_configured` from the P0 fix above — `PROVA_ATTESTER_PRIVATE_KEY`
+was never actually set as a Vercel Production env var, only as a GitHub
+Actions secret (used by `scripts/mainnet-admin.mjs` via
+`.github/workflows/mainnet-admin.yml`), which the live app can't read.
+
+If that GitHub Actions secret's value is no longer available to set in
+Vercel directly, it does **not** require a contract redeploy to fix.
+`ProvaPass.set_attester` (contracts/prova_pass/src/prova_pass.cairo) lets
+the contract's `owner` — whoever holds `STARKNET_ACCOUNT_ADDRESS` /
+`STARKNET_PRIVATE_KEY`, the same account that deployed it — rotate the
+attester public key on-chain at any time. Nothing else has to change:
+this repo signs the claim attestation at claim time, not at issuance, so
+already-issued unclaimed passes, all existing campaigns, and the
+nullifier registry are all untouched by rotating the attester key.
+
+Added three commands to `scripts/mainnet-admin.mjs` (runnable via the
+"Mainnet admin action" GitHub Actions workflow, since this dev sandbox
+has no direct Starknet RPC access):
+- `get-attester` — read-only, prints the current on-chain attester pubkey.
+- `generate-attester-key` — pure local keygen (no RPC), prints a fresh
+  `PROVA_ATTESTER_PRIVATE_KEY` / `PROVA_ATTESTER_PUBLIC_KEY` pair.
+- `set-attester <new_pubkey>` — owner-gated on-chain transaction that
+  points the contract at the new public key.
+
+**Recovery steps for the operator:**
+1. Run the GitHub Actions workflow with action `get-attester` to see what
+   the contract currently expects (useful to confirm it really doesn't
+   match whatever's in the `PROVA_ATTESTER_PRIVATE_KEY`/`_PUBLIC_KEY` GitHub
+   secrets, before rotating).
+2. If the existing key truly can't be recovered, run `generate-attester-key`
+   — copy the printed private/public keys out of the workflow run's log.
+3. Run `set-attester` with `arg1` = the new public key from step 2.
+4. Set `PROVA_ATTESTER_PRIVATE_KEY` (the private half) as a Vercel
+   **Production** environment variable and redeploy.
+5. This still requires `STARKNET_ACCOUNT_ADDRESS` / `STARKNET_PRIVATE_KEY`
+   (the contract owner / gas-sponsor account) to already be known to the
+   operator — that account cannot be rotated the same way `set_attester`
+   rotates the attester, since it's the caller identity itself, not
+   contract storage. If those are also lost, that's a separate, bigger
+   problem than the attester key (it would block claim-gas sponsorship
+   and any future `create_campaign`/`set_attester` calls) and needs its
+   own recovery plan — not something to solve by generating a new key
+   silently, since this is a real mainnet contract holding real state.
+
 ## UX: silent-looking Generate/Claim, no wallet disconnect button (fixed)
 
 **Symptom reported from a live demo-video attempt:** pressing "Generate

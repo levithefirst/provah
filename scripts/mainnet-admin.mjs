@@ -10,6 +10,15 @@
  * Required env: STARKNET_RPC_URL, STARKNET_ACCOUNT_ADDRESS, STARKNET_PRIVATE_KEY,
  *   PROVA_ATTESTER_PRIVATE_KEY (or PROVA_ATTESTER_PUBLIC_KEY for deploy),
  *   PROVA_PASS_CONTRACT_ADDRESS (for create-campaign / claim)
+ *
+ * Recovering a lost/never-set PROVA_ATTESTER_PRIVATE_KEY (no redeploy
+ * needed — ProvaPass.set_attester lets the contract's owner, i.e. whoever
+ * holds STARKNET_ACCOUNT_ADDRESS/STARKNET_PRIVATE_KEY here, rotate it):
+ *   node scripts/mainnet-admin.mjs get-attester              # see the current on-chain key
+ *   node scripts/mainnet-admin.mjs generate-attester-key     # local keygen, prints both halves
+ *   node scripts/mainnet-admin.mjs set-attester <new_pubkey> # pushes the new public half on-chain
+ * Then set PROVA_ATTESTER_PRIVATE_KEY (the private half) in Vercel Production
+ * env and redeploy. Never commit either half.
  */
 import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
@@ -395,6 +404,65 @@ async function cmdClaim() {
   console.log("claim tx:", transaction_hash);
 }
 
+// Pure local keygen — no RPC, no env beyond nothing. Used to recover from a
+// lost PROVA_ATTESTER_PRIVATE_KEY: since ProvaPass.set_attester lets the
+// contract's owner rotate attester_pubkey at any time (see prova_pass.cairo),
+// losing the old attester key is recoverable by generating a fresh keypair
+// and pointing the contract at its public half — no redeploy, no loss of
+// existing campaigns/nullifiers/passes. Already-issued-but-unclaimed passes
+// are unaffected too: this repo signs the attestation at CLAIM time, not at
+// issuance, so nothing already in prova_passes carries a signature tied to
+// the old key.
+async function cmdGenerateAttesterKey() {
+  const privBytes = ec.starkCurve.utils.randomPrivateKey();
+  const privHex = "0x" + Buffer.from(privBytes).toString("hex");
+  const pubHex = ec.starkCurve.getStarkKey(privHex);
+  console.log("Generated a new attester keypair. Store both in Vercel (Production env) — never commit them:");
+  console.log("  PROVA_ATTESTER_PRIVATE_KEY =", privHex);
+  console.log("  PROVA_ATTESTER_PUBLIC_KEY  =", pubHex);
+  console.log("\nThis key only takes effect once it's live on-chain. Next:");
+  console.log(`  node scripts/mainnet-admin.mjs set-attester ${pubHex}`);
+}
+
+async function cmdGetAttester() {
+  const contractAddress = requireEnv("PROVA_PASS_CONTRACT_ADDRESS");
+  const abi = JSON.parse(readFileSync(join(__dirname, "../src/contracts/prova_pass.sierra.json"), "utf-8")).abi;
+  const contract = new Contract({ abi, address: contractAddress, providerOrAccount: provider() });
+  const current = await contract.call("get_attester", []);
+  console.log("on-chain attester pubkey:", "0x" + BigInt(current).toString(16));
+}
+
+async function cmdSetAttester() {
+  const contractAddress = requireEnv("PROVA_PASS_CONTRACT_ADDRESS");
+  const newAttester = process.argv[3];
+  if (!newAttester) {
+    throw new Error(
+      "usage: set-attester <new_attester_pubkey_hex> — run `generate-attester-key` first if you need one"
+    );
+  }
+
+  const abi = JSON.parse(readFileSync(join(__dirname, "../src/contracts/prova_pass.sierra.json"), "utf-8")).abi;
+  const acc = account();
+  const p = provider();
+  const readContract = new Contract({ abi, address: contractAddress, providerOrAccount: p });
+  const before = await readContract.call("get_attester", []);
+  console.log("current on-chain attester pubkey:", "0x" + BigInt(before).toString(16));
+
+  // set_attester asserts get_caller_address() == owner (the account that
+  // deployed the contract, per cmdDeploy's constructorCalldata) — this will
+  // revert with 'not owner' if STARKNET_ACCOUNT_ADDRESS/STARKNET_PRIVATE_KEY
+  // here isn't that same deployer account.
+  const contract = new Contract({ abi, address: contractAddress, providerOrAccount: acc });
+  console.log("Submitting set_attester to", newAttester, "...");
+  const call = contract.populate("set_attester", [newAttester]);
+  const { transaction_hash } = await acc.execute(call);
+  console.log("set_attester tx:", transaction_hash);
+  await p.waitForTransaction(transaction_hash);
+
+  const after = await readContract.call("get_attester", []);
+  console.log("confirmed. on-chain attester pubkey is now:", "0x" + BigInt(after).toString(16));
+}
+
 const action = process.argv[2];
 const handlers = {
   "deploy-account": cmdDeployAccount,
@@ -409,6 +477,9 @@ const handlers = {
   "tx-status": cmdTxStatus,
   "pool-register": () => cmdPoolRegisterViewingKey({ dryRun: process.argv[3] !== "submit" }),
   "fund-contract": cmdFundContract,
+  "generate-attester-key": cmdGenerateAttesterKey,
+  "get-attester": cmdGetAttester,
+  "set-attester": cmdSetAttester,
 };
 const handler = handlers[action];
 if (!handler) {
