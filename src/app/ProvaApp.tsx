@@ -278,22 +278,26 @@ async function clientEvaluatePredicate(
 // safe diagnostic string, always shown too, so a residual failure is never
 // silent even for a stage this mapping doesn't have specific copy for.
 function ownershipFailureMessage(stage: string | undefined, detail: string | undefined): string {
-  const suffix = detail ? ` (${detail})` : "";
+  // Every branch ends with the raw [stage] + detail, not just the friendly
+  // sentence in front of it — so a screenshot of this status line is
+  // enough on its own to look up the exact failing stage in
+  // OwnershipFailureStage / the server log, no follow-up questions needed.
+  const suffix = ` [${stage ?? "unknown"}${detail ? `: ${detail}` : ""}]`;
   switch (stage) {
     case "missing_deployment_data":
-      return "This wallet hasn't been deployed on-chain yet, and didn't share the deployment data Provah needs to verify it without requiring a deployment. Try Ready, Argent, or Braavos (they support this), or send one small transaction from this wallet first to deploy it, then Generate again.";
+      return `This wallet hasn't been deployed on-chain yet, and didn't share the deployment data Provah needs to verify it without requiring a deployment. Try Ready, Argent, or Braavos (they support this), or send one small transaction from this wallet first to deploy it, then Generate again.${suffix}`;
     case "deploy_commit":
-      return `Provah couldn't match this wallet's deployment data to its address${suffix}. Reconnect the wallet and try again.`;
+      return `Provah couldn't match this wallet's deployment data to its address. Reconnect the wallet and try again.${suffix}`;
     case "signature_shape":
-      return `Provah didn't recognize the signature this wallet returned${suffix}. This account may use a multi-signer scheme that isn't supported yet.`;
+      return `Provah didn't recognize the signature this wallet returned. This account may use a multi-signer scheme that isn't supported yet.${suffix}`;
     case "rpc":
-      return `Provah couldn't reach Starknet to check this wallet${suffix}. Try again shortly.`;
+      return `Provah couldn't reach Starknet to check this wallet. Try again shortly.${suffix}`;
     case "typed_data":
-      return `Provah's own signing request was malformed${suffix} — this is a Provah bug, not something on your end. Please report it.`;
+      return `Provah's own signing request was malformed — this is a Provah bug, not something on your end. Please report it.${suffix}`;
     case "onchain":
     case "offchain":
     default:
-      return `Wallet signature could not be verified${suffix}. Refresh and try Generate again — this is not an eligibility failure.`;
+      return `Wallet signature could not be verified. Refresh and try Generate again — this is not an eligibility failure.${suffix}`;
   }
 }
 
@@ -731,6 +735,17 @@ export default function ProvaApp() {
         deploymentData = null;
       }
       setStatus("Issuing pass…");
+      // Diagnostic only — no secrets (proverWallet and the campaign are
+      // already public; the signature itself isn't logged, just whether
+      // one is present) — so a "Generate looks broken" report can be
+      // cross-checked against exactly what left the browser.
+      console.log("[Generate] POSTing /api/pass", {
+        campaignId: campaign.id,
+        proverAddress: proverWallet,
+        hasSignature: !!signature,
+        hasDeploymentData: !!deploymentData,
+        locked: lockPass,
+      });
       const res = await fetch("/api/pass", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -758,7 +773,19 @@ export default function ProvaApp() {
         } else if (res.status === 403) {
           setStatus(`Not eligible yet: ${data.error}`);
         } else if (res.status === 409) {
-          setStatus(`Already issued: ${data.error}`);
+          // The single most common "Generate looks broken" moment during a
+          // demo: it worked once, then a retake (or re-testing) with the
+          // SAME wallet on the SAME campaign correctly hits the one-pass-
+          // per-wallet-per-campaign guarantee. That's not a bug — but
+          // "Already issued: this wallet has already been issued a pass
+          // for this campaign" reads like an error, not an instruction.
+          // Spell out the fix in plain language instead of just echoing
+          // the server's error string.
+          setStatus(
+            data.error === "this wallet has already been issued a pass for this campaign"
+              ? "This wallet already has a pass for this campaign — one pass per wallet per campaign, by design. Connect a different, never-used wallet as Wallet A and Generate again."
+              : `Already issued: ${data.error}`
+          );
         } else if (res.status === 400 || res.status === 404) {
           setStatus(`This campaign can't issue a pass right now: ${data.error}`);
         } else {

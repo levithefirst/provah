@@ -129,6 +129,19 @@ export async function POST(req: NextRequest) {
       Math.floor(Date.now() / 1000)
     );
     if (!decision.ok) {
+      // This, not ownership verification, is the actual failure mode a
+      // successful demo run will most often hit next: the SAME wallet
+      // retrying Generate on the SAME campaign after already getting a
+      // pass (one pass per wallet per campaign, by design). Logged here
+      // because it previously wasn't logged at all — a 409 read as "looks
+      // broken" with nothing in the server logs to confirm it was actually
+      // working as intended.
+      console.log("[/api/pass] issuance declined:", {
+        proverAddress,
+        campaignId,
+        status: decision.status,
+        error: decision.error,
+      });
       return NextResponse.json({ ok: false, error: decision.error }, { status: decision.status });
     }
 

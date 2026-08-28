@@ -263,6 +263,63 @@ with `reward_amount > 0` pays out identically for any real user who goes
 through the live app's `/api/pass` → `/api/claim` flow, no code change
 required.
 
+## What shipped in this pass (P0: root-caused the live "Generate is broken" report)
+
+Checked production directly this time (Neon: project `provah`, DB
+`lingering-water-85722037`) instead of reasoning from code alone. Findings:
+
+- `prova_passes.status` is a plain `text` column with **no CHECK
+  constraint** — the residual risk flagged in the earlier QA pass (that the
+  atomic claim-lock's `'claiming'` status might be rejected by a schema
+  constraint) does not apply. Ruled out.
+- The **Capability Smoke Test campaign is active, not expired**, and
+  configured exactly as the code expects (`deposit_count`, minimum 0).
+- **`prova_passes` has exactly one row for the Smoke Test campaign**,
+  issued `2026-08-28T11:23:19Z`, `status = 'issued'`. Since
+  `(campaign_id, address_commitment)` is uniquely indexed, any further
+  Generate attempt from that same wallet on that same campaign correctly —
+  and unavoidably — returns `409 "this wallet has already been issued a
+  pass for this campaign"`. This is the most likely explanation for
+  "worked for the demo person earlier, then stopped": a retake or re-test
+  with the same wallet after the first successful Generate hits the
+  one-pass-per-wallet-per-campaign guarantee working exactly as designed,
+  which reads as "broken" mid-recording rather than as an instruction.
+  (If truly two *different* wallets both failed, at most one of those
+  failures is explained by this — the DB shows only one issued pass — so
+  this doesn't rule out a second, real ownership-verification failure; see
+  the new diagnostics below for confirming that if it recurs.)
+
+Fixes:
+
+- **The 409 message is now unmistakable.** Instead of echoing
+  `"Already issued: this wallet has already been issued a pass for this
+  campaign"`, Generate now says plainly: *"This wallet already has a pass
+  for this campaign — one pass per wallet per campaign, by design. Connect
+  a different, never-used wallet as Wallet A and Generate again."*
+- **`ownershipFailureMessage` now always appends the raw `[stage: detail]`**
+  to every branch (previously `missing_deployment_data` omitted it) — a
+  screenshot of the status line alone is now enough to identify the exact
+  failing stage, satisfying "401 always shows stage + detail" without
+  needing to ask the reporter follow-up questions.
+- **Loud, deliberate diagnostics added** at every decision point in
+  `verifyPassOwnership` (deployed/undeployed determination, deploy_commit
+  mismatch with computed vs. claimed address, offchain exhaustion) and in
+  `/api/pass` (the issuance-decision 409/400/404 path, which previously
+  logged nothing at all server-side — a 409 during a demo left zero trace
+  to distinguish "working as intended" from "actually broken"). Everything
+  logged is already-public data (addresses, booleans, array lengths), never
+  a private key or signature value.
+- Client now logs the POST body's keys (not the signature value itself)
+  before calling `/api/pass`, so a browser console screenshot can be
+  cross-checked against what the server actually received.
+
+Not done, and flagged rather than assumed: the one stuck `'issued'` row for
+the demo person's wallet on the Smoke Test campaign was left in place — 
+deleting production data isn't something to do without being asked. If the
+same wallet needs to Generate again for the demo, either connect a
+different wallet (recommended, and now what the error message itself
+says), or ask to have that one row cleared.
+
 ## What shipped in this pass (P0: Generate pass, permanently, for real this time)
 
 The undeployed-account fallback added in the previous pass was correct in

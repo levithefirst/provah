@@ -224,6 +224,17 @@ export async function verifyPassOwnership(
   const signatureCandidates = candidateSignaturePairs(signatureInput);
 
   const deployed = await isAccountDeployed(provider, proverAddress);
+  // Loud on purpose: everything logged here is already public (an address,
+  // a boolean, array lengths) — this is what turns a production "Generate
+  // is broken" report into a two-minute log read instead of a guessing
+  // game, without needing direct DB/RPC access to reproduce.
+  console.log("[verifyPassOwnership]", {
+    proverAddress,
+    deployed,
+    signatureCandidateCount: signatureCandidates.length,
+    hasDeploymentData: !!deploymentData,
+    deploymentDataCalldataLength: deploymentData?.calldata?.length ?? null,
+  });
 
   if (deployed) {
     let rpcError: unknown;
@@ -265,6 +276,13 @@ export async function verifyPassOwnership(
     );
   }
   if (BigInt(computedAddress) !== BigInt(proverAddress)) {
+    console.error("[verifyPassOwnership] deploy_commit mismatch", {
+      proverAddress,
+      computedAddress,
+      classHash: deploymentData.classHash,
+      salt: deploymentData.salt,
+      calldataLength: deploymentData.calldata.length,
+    });
     throw new OwnershipVerificationError(
       "deploy_commit",
       "deploymentData does not hash to the address claiming it"
@@ -279,6 +297,11 @@ export async function verifyPassOwnership(
       }
     }
   }
+  console.error("[verifyPassOwnership] offchain verification exhausted every candidate", {
+    proverAddress,
+    calldataLength: deploymentData.calldata.length,
+    signatureCandidateCount: signatureCandidates.length,
+  });
   throw new OwnershipVerificationError(
     "offchain",
     "signature did not verify against any public key found in the account's constructor calldata"
