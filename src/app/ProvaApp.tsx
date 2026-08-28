@@ -1,7 +1,8 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { connect, disconnect, type StarknetWindowObject } from "@starknet-io/get-starknet";
+import { disconnect, type StarknetWindowObject } from "@starknet-io/get-starknet";
+import getStarknetCore, { type WalletProvider } from "@starknet-io/get-starknet-core";
 import { RpcProvider, hash, num } from "starknet";
 import { issuePassTypedData, normalizePassDeploymentData, type PassDeploymentData } from "@/lib/passChallenge";
 import { evaluateDepositCount, evaluateHeldSince, isAlwaysTruePredicate } from "@/lib/predicateMath";
@@ -25,6 +26,7 @@ import {
   Ticket,
   Unlock,
   Wallet,
+  X,
 } from "lucide-react";
 
 type Campaign = {
@@ -407,17 +409,53 @@ function saveLocalPasses(passes: LocalPass[]) {
   }
 }
 
-async function connectWalletHandle(): Promise<{ address: string; wallet: StarknetWindowObject } | null> {
-  const swo = await connect({ modalMode: "alwaysAsk", modalTheme: "dark" });
+// get-starknet's own built-in connect() modal is a fixed dark UI with no
+// styling hooks beyond a light/dark/system flag — it never matched the
+// rest of Provah's design and looked crude next to it. `pick` is Provah's
+// own wallet-picker modal (see WalletPickerModal / usePicker below),
+// rendered with the same design system as everything else on the page.
+async function connectWalletHandle(
+  pick: () => Promise<StarknetWindowObject | null>
+): Promise<{ address: string; wallet: StarknetWindowObject } | null> {
+  const swo = await pick();
   if (!swo) return null;
   const accounts = await swo.request({ type: "wallet_requestAccounts" });
   const address = Array.isArray(accounts) && accounts.length > 0 ? accounts[0] : null;
   return address ? { address, wallet: swo } : null;
 }
 
-async function connectWallet(): Promise<string | null> {
-  const handle = await connectWalletHandle();
+async function connectWallet(pick: () => Promise<StarknetWindowObject | null>): Promise<string | null> {
+  const handle = await connectWalletHandle(pick);
   return handle?.address ?? null;
+}
+
+// StarknetWindowObject.icon is either one icon or a { dark, light } pair —
+// pick the one that matches Provah's own theme toggle instead of always
+// showing the dark-mode glyph on a light page (or vice versa).
+function walletIcon(icon: string | { dark: string; light: string } | undefined, dark: boolean): string | null {
+  if (!icon) return null;
+  if (typeof icon === "string") return icon;
+  return dark ? icon.dark : icon.light;
+}
+
+// The download-link record is keyed by browser/OS; prefer whichever one
+// actually matches this visitor instead of always linking to a chrome
+// webstore page a mobile Safari or Firefox user can't use.
+function pickDownloadLink(downloads: WalletProvider["downloads"]): string {
+  const record = downloads as Record<string, string>;
+  const ua = typeof navigator !== "undefined" ? navigator.userAgent.toLowerCase() : "";
+  const preferred = /android/.test(ua)
+    ? "android"
+    : /iphone|ipad|ipod/.test(ua)
+      ? "ios"
+      : /firefox/.test(ua)
+        ? "firefox"
+        : /edg\//.test(ua)
+          ? "edge"
+          : /safari/.test(ua) && !/chrome/.test(ua)
+            ? "safari"
+            : "chrome";
+  return record[preferred] ?? Object.values(record)[0];
 }
 
 /**
@@ -627,6 +665,139 @@ function CampaignSelect({
   );
 }
 
+/**
+ * Provah's own wallet picker, replacing get-starknet's built-in connect()
+ * modal. That modal is a fixed dark UI (a "modalTheme" flag is the only
+ * customization it exposes) with a flat "Install X" list and no visual
+ * connection to the rest of the app. This uses @starknet-io/get-starknet-
+ * core directly — the same headless wallet-discovery/enable API the
+ * built-in modal itself is built on — so it's exactly as capable (real
+ * installed-wallet detection, the same install links for wallets that
+ * aren't), just styled like everything else here.
+ */
+function WalletPickerModal({
+  open,
+  loading,
+  error,
+  available,
+  notInstalled,
+  connectingId,
+  dark,
+  onPick,
+  onClose,
+}: {
+  open: boolean;
+  loading: boolean;
+  error: string | null;
+  available: StarknetWindowObject[];
+  notInstalled: WalletProvider[];
+  connectingId: string | null;
+  dark: boolean;
+  onPick: (wallet: StarknetWindowObject) => void;
+  onClose: () => void;
+}) {
+  useEffect(() => {
+    if (!open) return;
+    function onKey(e: KeyboardEvent) {
+      if (e.key === "Escape") onClose();
+    }
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [open, onClose]);
+
+  if (!open) return null;
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-4">
+      <div className="absolute inset-0 bg-neutral-900/40 backdrop-blur-sm" onClick={onClose} />
+      <div className="animate-rise-in relative flex w-full max-w-sm flex-col gap-1 rounded-2xl border border-neutral-200 bg-white p-2 shadow-xl dark:border-neutral-800 dark:bg-neutral-900">
+        <div className="flex items-center justify-between px-3 pt-2 pb-1">
+          <h3 className="text-sm font-medium text-neutral-900 dark:text-neutral-100">Connect a wallet</h3>
+          <button
+            onClick={onClose}
+            aria-label="Close"
+            className="rounded-full p-1 text-neutral-400 transition-colors hover:bg-neutral-100 hover:text-neutral-700 dark:hover:bg-neutral-800 dark:hover:text-neutral-200"
+          >
+            <X className="h-4 w-4" strokeWidth={1.75} />
+          </button>
+        </div>
+        {error && (
+          <p className="mx-2 mb-1 rounded-md border border-amber-300 bg-amber-50 px-2.5 py-1.5 text-xs text-amber-800 dark:border-amber-800 dark:bg-amber-500/10 dark:text-amber-300">
+            {error}
+          </p>
+        )}
+        <div className="flex max-h-[60vh] flex-col gap-0.5 overflow-y-auto p-1">
+          {loading && (
+            <div className="flex items-center justify-center gap-2 py-6 text-sm text-neutral-500 dark:text-neutral-400">
+              <Loader2 className="h-4 w-4 animate-spin" strokeWidth={1.75} /> Looking for wallets…
+            </div>
+          )}
+          {!loading &&
+            available.map((w) => {
+              const icon = walletIcon(w.icon, dark);
+              const isConnecting = connectingId === w.id;
+              return (
+                <button
+                  key={w.id}
+                  onClick={() => onPick(w)}
+                  disabled={connectingId !== null}
+                  className="flex items-center gap-3 rounded-xl px-2.5 py-2.5 text-left transition-colors hover:bg-neutral-100 disabled:cursor-not-allowed disabled:opacity-60 dark:hover:bg-neutral-800"
+                >
+                  {icon ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={icon} alt="" className="h-8 w-8 shrink-0 rounded-lg" />
+                  ) : (
+                    <span className="flex h-8 w-8 shrink-0 items-center justify-center rounded-lg bg-neutral-100 dark:bg-neutral-800">
+                      <Wallet className="h-4 w-4 text-neutral-500" strokeWidth={1.75} />
+                    </span>
+                  )}
+                  <span className="flex-1 text-sm font-medium text-neutral-900 dark:text-neutral-100">
+                    {w.name}
+                  </span>
+                  {isConnecting ? (
+                    <Loader2 className="h-4 w-4 shrink-0 animate-spin text-neutral-400" strokeWidth={1.75} />
+                  ) : (
+                    <span className="shrink-0 rounded-full border border-emerald-300 bg-emerald-50 px-2 py-0.5 text-[11px] font-medium text-emerald-700 dark:border-emerald-800 dark:bg-emerald-500/10 dark:text-emerald-300">
+                      Installed
+                    </span>
+                  )}
+                </button>
+              );
+            })}
+          {!loading && notInstalled.length > 0 && (
+            <>
+              {available.length > 0 && (
+                <div className="my-1 border-t border-neutral-100 dark:border-neutral-800" />
+              )}
+              {notInstalled.map((w) => (
+                <a
+                  key={w.id}
+                  href={pickDownloadLink(w.downloads)}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="flex items-center gap-3 rounded-xl px-2.5 py-2.5 text-left transition-colors hover:bg-neutral-100 dark:hover:bg-neutral-800"
+                >
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img src={w.icon} alt="" className="h-8 w-8 shrink-0 rounded-lg opacity-70" />
+                  <span className="flex-1 text-sm text-neutral-600 dark:text-neutral-400">{w.name}</span>
+                  <span className="flex shrink-0 items-center gap-1 text-xs text-neutral-400 dark:text-neutral-500">
+                    Install <ExternalLink className="h-3 w-3" strokeWidth={1.75} />
+                  </span>
+                </a>
+              ))}
+            </>
+          )}
+          {!loading && available.length === 0 && notInstalled.length === 0 && (
+            <p className="px-2.5 py-6 text-center text-sm text-neutral-500 dark:text-neutral-400">
+              No Starknet wallets found.
+            </p>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function ProvaApp() {
   const [campaigns, setCampaigns] = useState<Campaign[]>([]);
   const [selected, setSelected] = useState<string>("");
@@ -655,6 +826,71 @@ export default function ProvaApp() {
   useEffect(() => {
     if (status) statusRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
   }, [status]);
+
+  // Provah's own wallet picker (see WalletPickerModal) — replaces
+  // get-starknet's built-in connect() modal for all three connect buttons.
+  const [walletPickerOpen, setWalletPickerOpen] = useState(false);
+  const [walletPickerLoading, setWalletPickerLoading] = useState(false);
+  const [walletPickerError, setWalletPickerError] = useState<string | null>(null);
+  const [availableWallets, setAvailableWallets] = useState<StarknetWindowObject[]>([]);
+  const [discoveryWallets, setDiscoveryWallets] = useState<WalletProvider[]>([]);
+  const [connectingWalletId, setConnectingWalletId] = useState<string | null>(null);
+  const [walletPickerDark, setWalletPickerDark] = useState(false);
+  const walletPickerResolveRef = useRef<((wallet: StarknetWindowObject | null) => void) | null>(null);
+
+  function pickWallet(): Promise<StarknetWindowObject | null> {
+    setWalletPickerDark(document.documentElement.classList.contains("dark"));
+    setWalletPickerOpen(true);
+    setWalletPickerError(null);
+    setWalletPickerLoading(true);
+    setAvailableWallets([]);
+    setDiscoveryWallets([]);
+    (async () => {
+      try {
+        const [avail, discovery] = await Promise.all([
+          getStarknetCore.getAvailableWallets(),
+          getStarknetCore.getDiscoveryWallets(),
+        ]);
+        setAvailableWallets(avail);
+        // Don't show an "Install" link for a wallet that's already usable —
+        // the discovery list is the full catalog regardless of what's
+        // actually injected into this browser.
+        const availableIds = new Set(avail.map((w) => w.id.toLowerCase()));
+        setDiscoveryWallets(discovery.filter((w) => !availableIds.has(w.id.toLowerCase())));
+      } catch {
+        setWalletPickerError("Couldn't list installed wallets. Refresh and try again.");
+      } finally {
+        setWalletPickerLoading(false);
+      }
+    })();
+    return new Promise((resolve) => {
+      walletPickerResolveRef.current = resolve;
+    });
+  }
+
+  function closeWalletPicker(result: StarknetWindowObject | null) {
+    setWalletPickerOpen(false);
+    setConnectingWalletId(null);
+    walletPickerResolveRef.current?.(result);
+    walletPickerResolveRef.current = null;
+  }
+
+  async function handlePickWallet(wallet: StarknetWindowObject) {
+    setConnectingWalletId(wallet.id);
+    setWalletPickerError(null);
+    try {
+      const enabled = await getStarknetCore.enable(wallet);
+      closeWalletPicker(enabled);
+    } catch (err) {
+      setWalletPickerError(
+        err instanceof Error && /reject|denied|cancel/i.test(err.message)
+          ? "Connection request was rejected in the wallet."
+          : "Couldn't connect to this wallet. Try again."
+      );
+      setConnectingWalletId(null);
+    }
+  }
+
   const [redeemTx, setRedeemTx] = useState<string | null>(null);
   // Which nullifier redeemTx belongs to — lets the Redeem button re-enable
   // for a genuinely different pasted token while still refusing to resubmit
@@ -825,7 +1061,7 @@ export default function ProvaApp() {
 
   async function handleConnectProver() {
     try {
-      const handle = await connectWalletHandle();
+      const handle = await connectWalletHandle(pickWallet);
       setProverWallet(handle?.address ?? null);
       setProverWalletHandle(handle?.wallet ?? null);
       setPass(null);
@@ -993,7 +1229,7 @@ export default function ProvaApp() {
 
   async function handleConnectClaimWallet() {
     try {
-      const addr = await connectWallet();
+      const addr = await connectWallet(pickWallet);
       if (addr) setClaimWallet(addr);
     } catch {
       setStatus("Wallet connection failed or was rejected.");
@@ -1067,7 +1303,7 @@ export default function ProvaApp() {
 
   async function handleConnectRedeemWallet() {
     try {
-      const addr = await connectWallet();
+      const addr = await connectWallet(pickWallet);
       if (addr) setRedeemWallet(addr);
     } catch {
       setRedeemStatus("Wallet connection failed or was rejected.");
@@ -1149,6 +1385,17 @@ export default function ProvaApp() {
 
   return (
     <div className="flex flex-col gap-8 text-neutral-900 dark:text-neutral-100">
+      <WalletPickerModal
+        open={walletPickerOpen}
+        loading={walletPickerLoading}
+        error={walletPickerError}
+        available={availableWallets}
+        notInstalled={discoveryWallets}
+        connectingId={connectingWalletId}
+        dark={walletPickerDark}
+        onPick={handlePickWallet}
+        onClose={() => closeWalletPicker(null)}
+      />
       <CapabilityFlow stage={flowStage} />
 
       <section className="flex flex-col gap-3 rounded-3xl border border-neutral-200 bg-white p-6 shadow-sm sm:p-8 dark:border-neutral-800 dark:bg-neutral-900/40 dark:shadow-none">
