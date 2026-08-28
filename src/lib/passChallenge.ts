@@ -16,15 +16,22 @@ const STARKNET_CHAIN_ID = "0x534e5f4d41494e";
 export function issuePassTypedData(campaignId: string): TypedData {
   return {
     types: {
+      // SNIP-12 revision 1: the domain type must be named "StarknetDomain"
+      // (not "StarkNetDomain") AND carry a "revision" field, with a matching
+      // domain.revision value below — starknet.js's own identifyRevision()
+      // silently fails validation (and every wallet_signTypedData /
+      // verifyMessageInStarknet call with it) if either half is missing,
+      // which is exactly what broke pass generation before this fix.
       StarknetDomain: [
         { name: "name", type: "shortstring" },
         { name: "version", type: "shortstring" },
         { name: "chainId", type: "shortstring" },
+        { name: "revision", type: "shortstring" },
       ],
       IssuePass: [{ name: "campaign_id", type: "felt" }],
     },
     primaryType: "IssuePass",
-    domain: { name: "Provah", version: "1", chainId: STARKNET_CHAIN_ID },
+    domain: { name: "Provah", version: "1", chainId: STARKNET_CHAIN_ID, revision: "1" },
     message: { campaign_id: campaignId },
   };
 }
