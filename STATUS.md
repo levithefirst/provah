@@ -263,6 +263,36 @@ with `reward_amount > 0` pays out identically for any real user who goes
 through the live app's `/api/pass` → `/api/claim` flow, no code change
 required.
 
+## What shipped in this pass (harden the ownership-signature fix against recurrence)
+
+A production report ("Generate pass isn't working," from whoever was
+recording the demo video) traced to the SNIP-12 ownership typed-data fixed
+in the previous pass: correct in shape, but nothing stopped the exact same
+class of bug from recurring silently. This pass hardens the fix itself,
+not just the symptom:
+
+- **Separated signature-verification failures from eligibility failures in
+  `/api/pass`.** A typed-data/schema throw or a genuinely invalid signature
+  now returns a distinct `{ error: "invalid_ownership_signature" }` at
+  `401`, logged server-side with the real error — never the same shape as
+  "predicate not satisfied" (`403`). Before this, both failure modes looked
+  identical to the UI, which is exactly how a 100%-failure crypto bug got
+  mistaken for "not eligible."
+- **Client shows distinct copy for the two cases** — `ProvaApp.tsx` no
+  longer prefixes a signature-verification failure with "Not eligible
+  yet."
+- **Added `npm run test:typed-data`** (`scripts/test-typed-data.ts`, via
+  `tsx`): a positive check that the real, shared `issuePassTypedData()`
+  validates and hashes correctly, and a negative check that reproduces the
+  exact shipped bug (the same shape with `revision` stripped) and asserts
+  it fails — using only starknet.js and the real builder, no wallet, DB,
+  or RPC. Locks this regression in permanently.
+- **Permanent top-of-file comment** on `passChallenge.ts` stating the
+  SNIP-12 revision-1 requirement plainly, so the next person editing this
+  file sees the constraint before breaking it again.
+- Added a "Troubleshooting" section below pointing at this exact failure
+  mode and the test that catches it.
+
 ## What shipped in this pass (≥3 pool-tx requirement resolved)
 
 Directly following the previous pass's re-confirmed finding that this
@@ -808,6 +838,17 @@ full writeup, including exactly which files would change (`predicate.ts`
 only — the contract's signature check already supports swapping in a real
 verifier or a prover-controlled key with no changes to the nullifier
 registry or claim flow).
+
+## Troubleshooting
+
+If **Generate pass fails immediately for every wallet**, check the SNIP-12
+ownership typed-data (`revision: "1"` must be present on both
+`types.StarknetDomain` and `domain` in `src/lib/passChallenge.ts`), not
+campaign predicates — a malformed typed-data shape fails signature
+verification before any predicate is ever evaluated, and `/api/pass` now
+returns a distinct `invalid_ownership_signature` (401) for exactly this
+case so it isn't mistaken for "not eligible." Run `npm run test:typed-data`
+to check this in isolation, no wallet or RPC required.
 
 ## Architecture
 

@@ -1,5 +1,9 @@
 import type { TypedData } from "starknet";
 
+// SNIP-12 revision 1: domain type MUST be StarknetDomain and MUST include
+// revision: "1" on both types.StarknetDomain and domain.revision.
+// Missing revision → starknet.js validateTypedData throws → was swallowed as 403 on /api/pass.
+
 // Public, non-secret — safe to import from client and server alike (unlike
 // attestation.ts, which also holds the attester's private key path).
 const STARKNET_CHAIN_ID = "0x534e5f4d41494e";

@@ -50,13 +50,43 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    const controlsAddress = await provider()
-      .verifyMessageInStarknet(issuePassTypedData(campaignId), signature, proverAddress)
-      .catch(() => false);
+    // Kept separate from predicate/eligibility failures below: a typed-data
+    // schema error (e.g. a malformed SNIP-12 domain — see passChallenge.ts's
+    // top comment for the exact regression this guards against) or a
+    // genuinely invalid signature are both "we couldn't verify you control
+    // this address," never "you're not eligible." Conflating the two once
+    // meant a broken typed-data shape looked identical to "not eligible" in
+    // the UI, when every single request was actually failing before
+    // eligibility was ever checked.
+    let controlsAddress: boolean;
+    try {
+      controlsAddress = await provider().verifyMessageInStarknet(
+        issuePassTypedData(campaignId),
+        signature,
+        proverAddress
+      );
+    } catch (err) {
+      console.error(
+        "[/api/pass] ownership signature verification threw (typed-data/schema/RPC error, not an eligibility failure):",
+        err instanceof Error ? err.message : String(err)
+      );
+      return NextResponse.json(
+        {
+          ok: false,
+          error: "invalid_ownership_signature",
+          detail: "typed data failed verification",
+        },
+        { status: 401 }
+      );
+    }
     if (!controlsAddress) {
       return NextResponse.json(
-        { ok: false, error: "signature does not prove control of proverAddress for this campaign" },
-        { status: 403 }
+        {
+          ok: false,
+          error: "invalid_ownership_signature",
+          detail: "signature does not prove control of proverAddress for this campaign",
+        },
+        { status: 401 }
       );
     }
 

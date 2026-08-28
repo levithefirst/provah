@@ -578,7 +578,16 @@ export default function ProvaApp() {
       });
       const data = await res.json();
       if (!res.ok) {
-        setStatus(`Not eligible yet: ${data.error}`);
+        // Distinct from "not eligible": this means the wallet's signature
+        // itself couldn't be verified — a crypto/typed-data problem, not a
+        // predicate one. Conflating the two once made a broken typed-data
+        // shape look identical to "not eligible" on screen, even though
+        // eligibility was never actually checked.
+        setStatus(
+          data.error === "invalid_ownership_signature"
+            ? "Wallet signature could not be verified. Refresh and try Generate again — this is not an eligibility failure."
+            : `Not eligible yet: ${data.error}`
+        );
         setPass(null);
       } else {
         const newPass: LocalPass = {
