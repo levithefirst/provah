@@ -263,6 +263,38 @@ with `reward_amount > 0` pays out identically for any real user who goes
 through the live app's `/api/pass` → `/api/claim` flow, no code change
 required.
 
+## What shipped in this pass (self-check + RPC speed, no behavior changes)
+
+The client-side self-check (independent re-derivation of eligibility
+against public RPC, before `/api/pass` is ever called) was scanning a
+wallet's entire deposit history from block 0 on every campaign switch,
+with a sequential await-in-a-loop for each deposit's block timestamp.
+Sped it up without touching what it verifies or removing any check:
+
+- **Zero-RPC short-circuit for always-true predicates** — the Capability
+  Smoke Test (`deposit_count`/`balance_threshold` with a minimum of 0)
+  now resolves instantly for any wallet, no RPC at all. Mirrored
+  server-side in `evaluatePredicate` so `/api/pass` doesn't redo the RPC
+  round trip for an answer already known.
+- **Bounded-concurrency timestamp fetching** — `held_since`'s per-deposit
+  block-timestamp lookups run a handful in parallel (limit 6) instead of
+  one at a time.
+- **Early pagination exit for `deposit_count`** — stops paging once
+  enough matching deposits are found to already answer the predicate.
+- **Session-lifetime cache** for a wallet's deposit history (keyed by
+  `address:token`) and for `/api/campaigns`, so switching campaigns on the
+  same connected wallet, or remounting the page, doesn't re-fetch.
+- **Cooperative cancellation** — switching wallet or campaign mid-fetch
+  now stops the abandoned self-check's in-flight RPC work instead of
+  letting it run to a result nobody uses.
+- Perceived-latency polish: shorter self-check status copy, an optimistic
+  "Issuing pass…" instead of a fetch-shaped status line, the pre-claim
+  balance read now runs in parallel with the claim submission instead of
+  before it, and the self-check row reserves its own height so nearby
+  content doesn't jump when it appears.
+- No predicate math, RPC contract addresses, signature verification, or
+  the Capability Smoke Test's "any wallet qualifies" behavior changed.
+
 ## What shipped in this pass (harden the ownership-signature fix against recurrence)
 
 A production report ("Generate pass isn't working," from whoever was

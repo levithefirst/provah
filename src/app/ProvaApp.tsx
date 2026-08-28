@@ -111,15 +111,65 @@ async function clientGetClaimCount(campaignId: string): Promise<number> {
   return count;
 }
 
-type ClientDeposit = { amount: bigint; token: string; timestampSec: number };
+type ClientDeposit = { amount: bigint; timestampSec: number };
 
-async function clientGetDepositHistory(userAddress: string, needTimestamps: boolean): Promise<ClientDeposit[]> {
+// address:token -> the full deposit history already fetched for that pair,
+// so switching campaigns (or re-checking the same campaign) on the same
+// connected wallet doesn't re-scan the wallet's entire on-chain lifetime
+// every time. Keyed by wallet address, so a wallet switch naturally lands
+// on a different (initially empty) cache entry — nothing to invalidate by
+// hand. "withTimestamps" tracks whether timestampSec was populated (only
+// held_since needs it); a with-timestamps entry can serve a
+// without-timestamps request, never the reverse. Only a complete,
+// non-early-exited, non-aborted scan is cached — a partial result (from
+// stopAtCount or a cancelled self-check) isn't safe to reuse for a
+// different predicate that needs the full history.
+type DepositCacheEntry = { deposits: ClientDeposit[]; withTimestamps: boolean };
+const depositHistoryCache = new Map<string, DepositCacheEntry>();
+
+function depositCacheKey(address: string, token: string): string {
+  return `${address.toLowerCase()}:${token.toLowerCase()}`;
+}
+
+// Bounded-concurrency map — held_since's per-event block-timestamp lookups
+// used to run as a strict sequential await-in-a-loop (an N+1 RPC
+// waterfall); this fires a handful in parallel instead, without hammering
+// public RPC with one request per deposit at once.
+async function mapWithConcurrency<T, R>(items: T[], limit: number, fn: (item: T) => Promise<R>): Promise<R[]> {
+  const results: R[] = new Array(items.length);
+  let next = 0;
+  async function worker() {
+    while (next < items.length) {
+      const i = next++;
+      results[i] = await fn(items[i]);
+    }
+  }
+  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, worker));
+  return results;
+}
+
+async function clientGetDepositHistory(
+  userAddress: string,
+  tokenAddress: string,
+  needTimestamps: boolean,
+  opts: { stopAtCount?: number; shouldAbort?: () => boolean } = {}
+): Promise<ClientDeposit[]> {
+  const cacheKey = depositCacheKey(userAddress, tokenAddress);
+  // A complete cached scan (with timestamps if this call needs them) always
+  // wins — zero RPC for a campaign switch on the same wallet.
+  const cached = depositHistoryCache.get(cacheKey);
+  if (cached && (cached.withTimestamps || !needTimestamps)) {
+    return cached.deposits;
+  }
+
   const provider = new RpcProvider({ nodeUrl: PUBLIC_RPC_URL });
   const userFelt = num.toHex(userAddress);
-  const deposits: ClientDeposit[] = [];
+  const tokenLower = tokenAddress.toLowerCase();
+  const matchingRaw: { amountLow: string; blockHash: string | undefined }[] = [];
   let continuationToken: string | undefined;
 
   do {
+    if (opts.shouldAbort?.()) break;
     const page = await provider.getEvents({
       address: STRK20_POOL_ADDRESS,
       keys: [[DEPOSIT_EVENT_KEY], [userFelt]],
@@ -130,18 +180,42 @@ async function clientGetDepositHistory(userAddress: string, needTimestamps: bool
     });
     for (const ev of page.events) {
       const [, token, amountLow] = ev.data ?? [];
-      let timestampSec = 0;
-      if (needTimestamps) {
-        const block = await provider.getBlockWithTxHashes(ev.block_hash ?? "latest");
-        timestampSec = "timestamp" in block ? (block.timestamp as number) : 0;
+      if ((token ?? "").toLowerCase() === tokenLower) {
+        matchingRaw.push({ amountLow: amountLow ?? "0", blockHash: ev.block_hash });
       }
-      deposits.push({ amount: BigInt(amountLow ?? "0"), token: token ?? "", timestampSec });
     }
     continuationToken = page.continuation_token;
-  } while (continuationToken);
+    // Early exit for deposit_count: once we already have enough
+    // token-matching deposits, more history can't change the answer — stop
+    // paginating instead of scanning the wallet's full lifetime history.
+    if (opts.stopAtCount !== undefined && matchingRaw.length >= opts.stopAtCount) break;
+  } while (continuationToken && !opts.shouldAbort?.());
+
+  let timestamps: number[] = matchingRaw.map(() => 0);
+  if (needTimestamps && !opts.shouldAbort?.()) {
+    timestamps = await mapWithConcurrency(matchingRaw, 6, async (ev) => {
+      if (opts.shouldAbort?.()) return 0;
+      const block = await provider.getBlockWithTxHashes(ev.blockHash ?? "latest");
+      return "timestamp" in block ? (block.timestamp as number) : 0;
+    });
+  }
+
+  const deposits: ClientDeposit[] = matchingRaw.map((ev, i) => ({
+    amount: BigInt(ev.amountLow),
+    timestampSec: timestamps[i] ?? 0,
+  }));
+
+  if (!opts.shouldAbort?.() && opts.stopAtCount === undefined) {
+    depositHistoryCache.set(cacheKey, { deposits, withTimestamps: needTimestamps });
+  }
 
   return deposits;
 }
+
+// Session-lifetime cache: /api/campaigns rarely changes between one mount
+// and the next remount of the same page (e.g. a fast-refresh or navigating
+// away and back), so a second mount can skip the round trip entirely.
+let campaignsCache: Campaign[] | null = null;
 
 type SelfCheckResult = { eligible: boolean; total: bigint; count: number };
 
@@ -149,13 +223,33 @@ type SelfCheckResult = { eligible: boolean; total: bigint; count: number };
 // server will check. Runs before /api/pass is ever called, so a user (or a
 // judge) never has to take Prova's "eligible" / "not eligible" verdict on
 // faith — the same public deposit events, the same arithmetic, done in the
-// browser.
-async function clientEvaluatePredicate(campaign: Campaign, userAddress: string): Promise<SelfCheckResult> {
-  const needsTimestamps = campaign.predicate_type === "held_since";
-  const deposits = (await clientGetDepositHistory(userAddress, needsTimestamps)).filter(
-    (d) => d.token.toLowerCase() === campaign.predicate_asset.toLowerCase()
-  );
+// browser. shouldAbort lets the caller (the self-check effect) bail out of
+// any still-running RPC work the moment the wallet or campaign changes,
+// instead of letting a stale request keep running just to have its result
+// thrown away.
+async function clientEvaluatePredicate(
+  campaign: Campaign,
+  userAddress: string,
+  shouldAbort?: () => boolean
+): Promise<SelfCheckResult> {
   const minAmount = BigInt(campaign.predicate_min_amount);
+
+  // Always-true predicates need zero RPC — most importantly the Capability
+  // Smoke Test (deposit_count, minimum 0), which must resolve instantly for
+  // literally any wallet, including one with no on-chain history at all.
+  if (
+    (campaign.predicate_type === "deposit_count" || campaign.predicate_type === "balance_threshold") &&
+    minAmount === BigInt(0)
+  ) {
+    return { eligible: true, total: BigInt(0), count: 0 };
+  }
+
+  const needsTimestamps = campaign.predicate_type === "held_since";
+  const stopAtCount = campaign.predicate_type === "deposit_count" ? Number(minAmount) : undefined;
+  const deposits = await clientGetDepositHistory(userAddress, campaign.predicate_asset, needsTimestamps, {
+    stopAtCount,
+    shouldAbort,
+  });
 
   if (campaign.predicate_type === "deposit_count") {
     const count = BigInt(deposits.length);
@@ -425,11 +519,21 @@ export default function ProvaApp() {
 
   useEffect(() => {
     setLocalPasses(loadLocalPasses());
+    if (campaignsCache) {
+      const loaded = campaignsCache;
+      setCampaigns(loaded);
+      const openAccess = loaded.find(isOpenAccessCampaign);
+      if (openAccess) setSelected(openAccess.id);
+      else if (loaded[0]) setSelected(loaded[0].id);
+      setCampaignsLoading(false);
+      return;
+    }
     fetch("/api/campaigns")
       .then((r) => r.json())
       .then((d) => {
         const loaded: Campaign[] = d.campaigns ?? [];
         setCampaigns(loaded);
+        if (!d.error) campaignsCache = loaded;
         // Default new visitors to the open-access campaign so the happy path
         // works with zero deposit history and no reading required first.
         const openAccess = loaded.find(isOpenAccessCampaign);
@@ -457,7 +561,7 @@ export default function ProvaApp() {
     let cancelled = false;
     setSelfCheck("checking");
     setSelfCheckDetail("");
-    clientEvaluatePredicate(campaign, proverWallet)
+    clientEvaluatePredicate(campaign, proverWallet, () => cancelled)
       .then((result) => {
         if (cancelled) return;
         setSelfCheck(result.eligible ? "eligible" : "ineligible");
@@ -565,7 +669,7 @@ export default function ProvaApp() {
         type: "wallet_signTypedData",
         params: issuePassTypedData(campaign.id),
       })) as string[];
-      setStatus("Evaluating predicate against your public deposit history…");
+      setStatus("Issuing pass…");
       const res = await fetch("/api/pass", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -636,12 +740,14 @@ export default function ProvaApp() {
         : "Submitting claim on-chain (gasless: Provah relays it)…"
     );
     try {
-      const before = hasReward ? await fetchStrkBalance(claimWallet).catch(() => null) : null;
-      const res = await fetch("/api/claim", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ campaignId: campaign.id, nullifier: pass.nullifier, recipient: claimWallet }),
-      });
+      const [before, res] = await Promise.all([
+        hasReward ? fetchStrkBalance(claimWallet).catch(() => null) : Promise.resolve(null),
+        fetch("/api/claim", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ campaignId: campaign.id, nullifier: pass.nullifier, recipient: claimWallet }),
+        }),
+      ]);
       const data = await res.json();
       if (!res.ok) {
         setStatus(`Claim failed: ${data.error}`);
@@ -696,16 +802,18 @@ export default function ProvaApp() {
     const hasReward = redeemCampaign ? !!rewardLabel(redeemCampaign) : false;
     setRedeemStatus(hasReward ? "Checking your STRK balance, then submitting claim on-chain (gasless)…" : "Submitting claim on-chain (gasless)…");
     try {
-      const before = hasReward ? await fetchStrkBalance(redeemWallet).catch(() => null) : null;
-      const res = await fetch("/api/claim", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          campaignId: decoded.campaignId,
-          nullifier: decoded.nullifier,
-          recipient: redeemWallet,
+      const [before, res] = await Promise.all([
+        hasReward ? fetchStrkBalance(redeemWallet).catch(() => null) : Promise.resolve(null),
+        fetch("/api/claim", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            campaignId: decoded.campaignId,
+            nullifier: decoded.nullifier,
+            recipient: redeemWallet,
+          }),
         }),
-      });
+      ]);
       const data = await res.json();
       if (!res.ok) {
         setRedeemStatus(`Claim failed: ${data.error}`);
@@ -885,6 +993,7 @@ export default function ProvaApp() {
           </button>
           <span className="font-mono text-sm text-neutral-500 dark:text-neutral-400">{short(proverWallet)}</span>
         </div>
+        <div className={proverWallet && selfCheck !== "idle" ? undefined : "min-h-[2.25rem]"}>
         {proverWallet && selfCheck !== "idle" && (
           <p
             className={`animate-rise-in flex items-start gap-1.5 rounded-md border px-2 py-1.5 text-xs ${
@@ -907,13 +1016,14 @@ export default function ProvaApp() {
             <span>
               <span className="font-medium">Self-check</span> (runs in your browser, against public
               RPC, independent of Provah):{" "}
-              {selfCheck === "checking" && "reading your public deposit history…"}
+              {selfCheck === "checking" && "Checking public deposits…"}
               {selfCheck === "eligible" && `You qualify. ${selfCheckDetail}`}
               {selfCheck === "ineligible" && `Not yet eligible. ${selfCheckDetail}`}
               {selfCheck === "error" && selfCheckDetail}
             </span>
           </p>
         )}
+        </div>
         {proverWallet && selfCheck === "ineligible" && campaign && !isOpenAccessCampaign(campaign) && (
           <div className="animate-rise-in flex flex-col gap-2 rounded-md border border-neutral-300 bg-neutral-50 p-3 text-xs text-neutral-700 dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-300">
             <p>

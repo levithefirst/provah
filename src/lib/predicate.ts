@@ -119,6 +119,14 @@ export async function evaluatePredicate(
   minAmount: bigint,
   minDays: number
 ): Promise<{ eligible: boolean; evidence: DepositRecord[] }> {
+  // Always-true predicates (the Capability Smoke Test: deposit_count with a
+  // minimum of 0, or any amount-based predicate with a minimum of 0) need no
+  // deposit history at all — mirrors the same short-circuit in
+  // ProvaApp.tsx's clientEvaluatePredicate so /api/pass doesn't burn an RPC
+  // round trip re-deriving an answer that's already known.
+  if ((predicateType === "deposit_count" || predicateType === "balance_threshold") && minAmount === BigInt(0)) {
+    return { eligible: true, evidence: [] };
+  }
   switch (predicateType) {
     case "balance_threshold":
       return evaluateBalanceThreshold(userAddress, tokenAddress, minAmount);
