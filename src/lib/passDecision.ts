@@ -11,6 +11,15 @@ export type PassIssuanceCheck = {
   campaignExpirySec: number | null;
   nullifierAlreadyUsed: boolean;
   alreadyIssuedForWallet: boolean;
+  // Only reward campaigns need "one pass per wallet" — that's what stops
+  // one eligible address from draining the reward pool by generating N
+  // passes and claiming all of them to N fresh wallets. A campaign with no
+  // STRK reward (the Capability Smoke Test, any other capability-only
+  // campaign) has nothing to drain, so a wallet that wants to demo/retest
+  // Generate repeatedly should be able to — the caller decides this from
+  // the campaign's reward_amount and passes it in, since it's a DB/business
+  // fact, not something this pure function should look up itself.
+  enforceOnePerWallet: boolean;
 };
 
 export type Decision = { ok: true } | { ok: false; status: number; error: string };
@@ -24,7 +33,7 @@ export function decidePassIssuance(check: PassIssuanceCheck, nowSec: number): De
   if (check.nullifierAlreadyUsed) {
     return { ok: false, status: 409, error: "pass already issued for this input" };
   }
-  if (check.alreadyIssuedForWallet) {
+  if (check.enforceOnePerWallet && check.alreadyIssuedForWallet) {
     return {
       ok: false,
       status: 409,

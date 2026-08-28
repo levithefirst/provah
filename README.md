@@ -206,15 +206,22 @@ boundary without the missing prover has been:
   private key. The client-side self-check above proves this is exactly
   what happens: if Prova's server were reading anything else, its verdict
   and the browser's independent verdict would disagree.
-- **One pass per wallet per campaign, enforced server-side.** Nullifiers
-  were previously derivable with a client-supplied `salt`, which meant a
-  single qualifying wallet could in principle request unlimited passes for
-  one campaign by varying the salt. `/api/pass` now also computes a
-  deterministic, salt-free `address_commitment = pedersen(address,
-  campaignId)` and rejects a second pass request for a commitment that's
-  already on file (`409`), enforced by a unique index on
-  `(campaign_id, address_commitment)` in Postgres. One real wallet, one
-  pass, per campaign — not bounded only by good faith.
+- **One pass per wallet per campaign — but only where that limit actually
+  protects something.** Nullifiers are derivable with a caller-suppliable
+  `salt`, which means a single qualifying wallet could in principle request
+  unlimited passes for one campaign by varying the salt. For a **reward**
+  campaign (`reward_amount > 0`), `/api/pass` computes a deterministic,
+  salt-free `address_commitment = pedersen(address, campaignId)` and
+  rejects a second pass request for a commitment already on file (`409`) —
+  enforced by a unique index on `(campaign_id, address_commitment)` in
+  Postgres. One real wallet, one pass, per reward campaign — the pool
+  can't be drained by minting N passes from one eligible address. For a
+  **non-reward** campaign (the Capability Smoke Test and any other purely
+  capability-based campaign), there is nothing to drain, so this limit
+  doesn't apply: the same wallet can Generate as many times as it wants,
+  each with its own nullifier — useful for demoing or re-testing without
+  hunting for a fresh empty wallet every time. Nullifier uniqueness itself
+  (no pass, reward or not, can ever be claimed twice) is unconditional.
 
 ## Verify it yourself
 
@@ -296,7 +303,7 @@ the demo as a stronger privacy guarantee than it actually provides today.
 | **That a deposit into the pool happened, its amount, and the depositor's address** | **Public.** STRK20 deposits are screened and emit a public `Deposit` event (confirmed directly from the pool's Cairo source and the hackathon's Day-0 guide). Prova's predicate evaluators read this real, public event log — they are not reading anything private. |
 | **The claim transaction and the recipient wallet** | Public, and by construction **not linkable** to the depositor address above: the `ProvaPass` contract only ever sees `(campaign_id, nullifier, recipient, signature)`. The nullifier is a Pedersen hash of `(campaign_id, prover_address, salt)` computed off-chain — nothing about the prover address is recoverable from it on-chain. |
 | **The predicate check itself** | **This is the honest trust boundary, and it's temporary.** See "The attester today, and what replaces it" below. |
-| **Who Prova can link, operationally** | Prova's server sees the prover's address for the duration of the `/api/pass` request (to read its public deposits) but stores only one-way Pedersen commitments of it, never the raw address — see `src/lib/attestation.ts`. **Be precise about a real trade-off this pass introduced:** one of those two stored commitments (`issuer_commitment`) includes a random salt and is unguessable without it; the other (`address_commitment`, added to enforce "one pass per wallet per campaign") is deterministic — `pedersen(address, campaignId)`, no salt — specifically so repeat requests for the same wallet collide. That means anyone with **database access** (in practice, only Prova operating honestly, or Prova compromised) could test a candidate address against a campaign and learn whether that address already holds a pass for it. It reveals nothing to anyone without database access, and nothing about which wallet claims a pass, but it is a narrower privacy guarantee against an already-trusted-or-compromised operator than the previous salted-only design — a deliberate trade against a concrete abuse (unlimited pass minting from one wallet), disclosed rather than left implicit. |
+| **Who Prova can link, operationally** | Prova's server sees the prover's address for the duration of the `/api/pass` request (to read its public deposits) but stores only one-way Pedersen commitments of it, never the raw address — see `src/lib/attestation.ts`. **Be precise about a real trade-off this pass introduced, and where it now does and doesn't apply:** one of those two stored commitments (`issuer_commitment`) includes a random salt and is unguessable without it; the other (`address_commitment`, computed only for **reward** campaigns — `reward_amount > 0` — to enforce one pass per wallet there) is deterministic — `pedersen(address, campaignId)`, no salt — specifically so repeat requests for the same wallet collide. That means anyone with **database access** (in practice, only Prova operating honestly, or Prova compromised) could test a candidate address against a *reward* campaign and learn whether that address already holds a pass for it. For a non-reward campaign (the Capability Smoke Test, or any other purely capability-based campaign), `address_commitment` is never computed at all — `null` every time, so this narrower guarantee doesn't apply there, and nothing is linkable through it even to a compromised operator. It reveals nothing to anyone without database access, and nothing about which wallet claims a pass, but on a reward campaign it is a narrower privacy guarantee against an already-trusted-or-compromised operator than the previous salted-only design — a deliberate trade against a concrete abuse (draining a reward pool from one wallet), disclosed rather than left implicit. |
 
 In short: **today**, unlinkability is real and enforced on-chain; the
 predicate check is a signed server attestation instead of a client-side ZK

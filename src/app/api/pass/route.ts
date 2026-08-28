@@ -97,19 +97,36 @@ export async function POST(req: NextRequest) {
     const { rows } = await db().query(`SELECT * FROM campaigns WHERE id = $1`, [campaignId]);
     const campaign = rows[0];
 
-    const addressCommitment = campaign
-      ? "0x" + pedersen(BigInt(proverAddress), BigInt(campaignId)).toString(16)
-      : null;
+    // One pass per wallet only matters for campaigns that pay a reward —
+    // that's the only thing a repeat Generate from one eligible address
+    // could actually drain. A capability-only campaign (the Capability
+    // Smoke Test, or any other reward_amount = 0 campaign) has nothing to
+    // drain, so a wallet demoing or re-testing Generate isn't forced to
+    // find a fresh, never-used wallet every time.
+    const hasReward = campaign ? BigInt(campaign.reward_amount || "0") > BigInt(0) : false;
+
+    // address_commitment is only computed (and only enforced as unique) for
+    // reward campaigns. Left null for non-reward campaigns rather than
+    // just skipped in the app-level check: Postgres treats every NULL in a
+    // unique index as distinct from every other NULL, so this needs no
+    // schema/migration change at all — the existing unique index on
+    // (campaign_id, address_commitment) simply never fires for a null
+    // value, and multiple non-reward passes for the same wallet coexist
+    // without incident.
+    const addressCommitment =
+      campaign && hasReward ? "0x" + pedersen(BigInt(proverAddress), BigInt(campaignId)).toString(16) : null;
     const nullifier = deriveNullifier(BigInt(campaignId), BigInt(proverAddress), BigInt(salt));
     const nullifierHex = "0x" + nullifier.toString(16);
 
     const [existingByNullifier, existingByWallet] = campaign
       ? await Promise.all([
           db().query(`SELECT 1 FROM prova_passes WHERE nullifier = $1`, [nullifierHex]),
-          db().query(`SELECT 1 FROM prova_passes WHERE campaign_id = $1 AND address_commitment = $2`, [
-            campaignId,
-            addressCommitment,
-          ]),
+          hasReward
+            ? db().query(`SELECT 1 FROM prova_passes WHERE campaign_id = $1 AND address_commitment = $2`, [
+                campaignId,
+                addressCommitment,
+              ])
+            : Promise.resolve({ rows: [] }),
         ])
       : [null, null];
 
@@ -120,6 +137,7 @@ export async function POST(req: NextRequest) {
         campaignExpirySec: campaign ? Number(campaign.expiry) : null,
         nullifierAlreadyUsed: (existingByNullifier?.rows.length ?? 0) > 0,
         alreadyIssuedForWallet: (existingByWallet?.rows.length ?? 0) > 0,
+        enforceOnePerWallet: hasReward,
       },
       Math.floor(Date.now() / 1000)
     );

@@ -367,6 +367,14 @@ function rewardLabel(c: Campaign): string | null {
   return `Redeeming pays ${formatStrk(c.reward_amount)} to the claiming wallet: a real transfer, not just a record.`;
 }
 
+// Matches /api/pass's exact multi-pass policy (BigInt(reward_amount || "0")
+// > 0), independent of claim_kind — used here only to decide whether
+// Generate should force a disconnect afterward (see handleGeneratePass),
+// not to decide reward copy (that's rewardLabel's job).
+function hasReward(c: Campaign): boolean {
+  return BigInt(c.reward_amount || "0") > BigInt(0);
+}
+
 function expiryLabel(c: Campaign): string {
   const ms = Number(c.expiry) * 1000;
   if (!Number.isFinite(ms) || ms <= 0) return "No expiry set";
@@ -809,14 +817,31 @@ export default function ProvaApp() {
         };
         setPass(newPass);
         addLocalPass(newPass);
-        setStatus(
-          data.boundRecipient
-            ? `Pass issued, locked to ${short(data.boundRecipient)}. Only that wallet can claim it.`
-            : "Pass issued. Disconnect, then connect a completely different wallet to claim."
-        );
-        await disconnect();
-        setProverWallet(null);
-        setProverWalletHandle(null);
+        // Reward campaigns are one-pass-per-wallet (the reward pool could
+        // otherwise be drained by one address generating many passes), so
+        // disconnecting nudges toward the intended flow: this wallet is
+        // done, connect a different one to claim. Non-reward campaigns
+        // (the Capability Smoke Test, or any other campaign with nothing
+        // to drain) allow unlimited passes per wallet by design — forcing
+        // a disconnect there would just be friction with no purpose, so
+        // this wallet stays connected and Generate can be clicked again
+        // immediately.
+        if (hasReward(campaign)) {
+          setStatus(
+            data.boundRecipient
+              ? `Pass issued, locked to ${short(data.boundRecipient)}. Only that wallet can claim it.`
+              : "Pass issued. Disconnect, then connect a completely different wallet to claim."
+          );
+          await disconnect();
+          setProverWallet(null);
+          setProverWalletHandle(null);
+        } else {
+          setStatus(
+            data.boundRecipient
+              ? `Pass issued, locked to ${short(data.boundRecipient)}. Only that wallet can claim it.`
+              : "Pass issued. This campaign allows multiple passes per wallet — Generate again anytime, or connect a different wallet to claim."
+          );
+        }
       }
     } catch {
       setStatus("Wallet declined to sign, or Provah was unreachable.");

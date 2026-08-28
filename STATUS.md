@@ -263,6 +263,52 @@ with `reward_amount > 0` pays out identically for any real user who goes
 through the live app's `/api/pass` → `/api/claim` flow, no code change
 required.
 
+## Policy: multi-pass Generate on non-reward campaigns, one-pass on reward campaigns
+
+**The rule, precisely:** a wallet may Generate as many passes as it wants
+for a campaign with `reward_amount = 0` (the Capability Smoke Test, or any
+other purely capability-based campaign — nothing there can be drained by
+repeat issuance). A wallet may Generate **at most one** pass for a campaign
+with `reward_amount > 0` — that limit is what stops one eligible address
+from minting N passes and draining the reward pool by claiming all of them
+to N fresh wallets. This was previously a single unconditional "one pass
+per wallet per campaign" rule; it's now conditional on whether there's
+actually a pool balance to protect.
+
+**Why this was safe to relax, and how, without a schema migration:**
+`prova_passes.address_commitment` is a nullable column, and Postgres
+treats every `NULL` in a unique index as distinct from every other
+`NULL` — so `/api/pass` now only computes and stores the real
+`pedersen(address, campaignId)` commitment for reward campaigns;
+non-reward campaigns store `NULL`, and the existing unique index on
+`(campaign_id, address_commitment)` simply never fires for a `NULL`
+value. No `ALTER TABLE`, no dropped constraint, no residual DB-level race
+to document — the one-pass enforcement for reward campaigns is exactly
+as strong as it was before, and non-reward campaigns get unlimited passes
+for free from a column that already allowed it.
+
+**What did not change:** nullifier uniqueness (`prova_passes.nullifier` is
+still the primary key — no pass, reward or not, can ever be claimed
+twice), ownership signature verification, predicate/eligibility checks,
+destination binding, and the atomic claim-lock. This is a change to who
+gets to *ask* for a pass repeatedly, never to what proves they're allowed
+to have one or spend one.
+
+**Client UX:** Generate no longer force-disconnects the prover wallet
+after a successful non-reward issuance (previously it always did, forcing
+even a Smoke Test retest to find or reconnect a wallet by hand) — it does
+still disconnect after a reward-campaign issuance, since that flow is
+genuinely meant to be one-shot per wallet. The one wallet that already
+holds a Smoke Test pass from an earlier session (see the entry below) can
+now Generate again without hitting the 409 that previously blocked it.
+
+**Tests:** `test:pass-decision` gained three cases exercising
+`enforceOnePerWallet: false` (repeat issuance allowed even if a prior row
+exists; the common case with no prior row; nullifier uniqueness still
+enforced regardless of the reward flag) — the pure decision logic is
+unit-tested independent of Postgres's NULL semantics, which are relied on
+in `/api/pass` but not something a unit test can exercise directly.
+
 ## What shipped in this pass (P0: root-caused the live "Generate is broken" report)
 
 Checked production directly this time (Neon: project `provah`, DB
