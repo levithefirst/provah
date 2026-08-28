@@ -270,6 +270,33 @@ async function clientEvaluatePredicate(
   return { eligible, total, count: deposits.length };
 }
 
+// Distinct, actionable copy per ownership-verification failure stage (see
+// OwnershipFailureStage in passChallenge.ts) — so a judge testing a
+// brand-new wallet sees "deploy this account or use a wallet that supports
+// deployment data," not the same generic "signature could not be verified"
+// that also covers a genuinely bad signature. `detail` is the server's own
+// safe diagnostic string, always shown too, so a residual failure is never
+// silent even for a stage this mapping doesn't have specific copy for.
+function ownershipFailureMessage(stage: string | undefined, detail: string | undefined): string {
+  const suffix = detail ? ` (${detail})` : "";
+  switch (stage) {
+    case "missing_deployment_data":
+      return "This wallet hasn't been deployed on-chain yet, and didn't share the deployment data Provah needs to verify it without requiring a deployment. Try Ready, Argent, or Braavos (they support this), or send one small transaction from this wallet first to deploy it, then Generate again.";
+    case "deploy_commit":
+      return `Provah couldn't match this wallet's deployment data to its address${suffix}. Reconnect the wallet and try again.`;
+    case "signature_shape":
+      return `Provah didn't recognize the signature this wallet returned${suffix}. This account may use a multi-signer scheme that isn't supported yet.`;
+    case "rpc":
+      return `Provah couldn't reach Starknet to check this wallet${suffix}. Try again shortly.`;
+    case "typed_data":
+      return `Provah's own signing request was malformed${suffix} — this is a Provah bug, not something on your end. Please report it.`;
+    case "onchain":
+    case "offchain":
+    default:
+      return `Wallet signature could not be verified${suffix}. Refresh and try Generate again — this is not an eligibility failure.`;
+  }
+}
+
 function short(addr: string | null | undefined) {
   if (!addr) return "none";
   return addr.slice(0, 6) + "…" + addr.slice(-4);
@@ -675,16 +702,19 @@ export default function ProvaApp() {
       // Proves proverWallet actually controls this address, before Provah
       // reads its public deposit history — without this, anyone who merely
       // knew an eligible address (itself public) could mint a pass for it.
-      const signature = (await proverWalletHandle.request({
+      const signature = await proverWalletHandle.request({
         type: "wallet_signTypedData",
         params: issuePassTypedData(campaign.id),
-      })) as string[];
+      });
       // Starknet accounts are counterfactual until their first transaction —
       // a genuinely fresh wallet (exactly what the Capability Smoke Test
       // invites) has no deployed contract yet for Provah's server-side
       // is_valid_signature check to call. Best-effort: an already-deployed
       // wallet rejects this request (ACCOUNT_ALREADY_DEPLOYED), which is
-      // fine — the server verifies those the normal on-chain way.
+      // fine — the server verifies those the normal on-chain way. If this
+      // fails for an actually-undeployed wallet, the server will report
+      // stage "missing_deployment_data" and the UI below explains exactly
+      // that, instead of a generic signature-failure message.
       let deploymentData: PassDeploymentData | null = null;
       try {
         const dd = (await proverWalletHandle.request({ type: "wallet_deploymentData" })) as {
@@ -693,7 +723,11 @@ export default function ProvaApp() {
           calldata: string[];
         };
         deploymentData = { classHash: dd.class_hash, salt: dd.salt, calldata: dd.calldata };
-      } catch {
+      } catch (err) {
+        console.warn(
+          "[Generate] wallet_deploymentData unavailable (fine if this wallet is already deployed):",
+          err instanceof Error ? err.message : String(err)
+        );
         deploymentData = null;
       }
       setStatus("Issuing pass…");
@@ -720,7 +754,7 @@ export default function ProvaApp() {
         // else, and telling a judge "not eligible" for any of those is
         // simply false.
         if (data.error === "invalid_ownership_signature") {
-          setStatus("Wallet signature could not be verified. Refresh and try Generate again — this is not an eligibility failure.");
+          setStatus(ownershipFailureMessage(data.stage, data.detail));
         } else if (res.status === 403) {
           setStatus(`Not eligible yet: ${data.error}`);
         } else if (res.status === 409) {

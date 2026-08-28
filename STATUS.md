@@ -263,6 +263,65 @@ with `reward_amount > 0` pays out identically for any real user who goes
 through the live app's `/api/pass` → `/api/claim` flow, no code change
 required.
 
+## What shipped in this pass (P0: Generate pass, permanently, for real this time)
+
+The undeployed-account fallback added in the previous pass was correct in
+shape but unverifiable in production: every failure collapsed into one
+generic `invalid_ownership_signature`, so when Generate kept failing there
+was no way to tell *why* — a bad signature, a wallet that doesn't support
+`wallet_deploymentData`, an RPC hiccup, and a genuinely malformed typed-data
+payload all looked identical from the outside. This pass replaces "trust it
+worked" with "prove it, and if it doesn't, say exactly where":
+
+- **`verifyPassOwnership` now throws a tagged `OwnershipVerificationError`**
+  (`stage` ∈ `typed_data | signature_shape | rpc | onchain |
+  missing_deployment_data | deploy_commit | offchain`) instead of returning
+  a bare boolean or a single generic error. `/api/pass` logs the full
+  context (address, campaign, stage, detail, signature length,
+  deploymentData presence) and returns `{ error: "invalid_ownership_signature",
+  stage, detail }` — never swallowed into a bare 401.
+- **Deployment status is now determined explicitly**, via `getClassHashAt`
+  and the JSON-RPC's own numeric error code 20 (`CONTRACT_NOT_FOUND`),
+  instead of pattern-matching the error text `verifyMessageInStarknet`
+  happened to throw. The numeric code is spec-guaranteed across compliant
+  RPC providers; message text is not — this was the most likely reason the
+  previous fallback could silently fail to trigger at all on some RPC
+  backends.
+- **Signature shape is validated explicitly**, not assumed. Wallets are
+  free to return `[r, s]` (the documented shape) or occasionally an
+  `{r, s}` object; anything else — a 1-element or 3+-element array, most
+  plausibly a wallet appending guardian/session-key data — now fails with
+  a clear `signature_shape` stage instead of either silently
+  misinterpreting extra elements as r/s or crashing.
+- **The client surfaces stage-specific copy** instead of one generic
+  "signature could not be verified" message — most importantly,
+  `missing_deployment_data` now tells the user plainly that this wallet
+  didn't share deployment data and suggests either a wallet that supports
+  it (Ready/Argent/Braavos) or sending one transaction first to deploy the
+  account, rather than looking like an unexplained failure.
+- **`npm run test:ownership-fallback` now covers every stage** (9 checks:
+  both the deployed and undeployed accept paths, all 5 failure stages, the
+  `{r,s}` object shape, a too-long/too-short signature array, and an
+  unrelated RPC error correctly NOT being treated as "undeployed").
+
+No predicate changes, no in-app shield, no weakened ownership check — the
+undeployed-account path still requires deploymentData that commits to the
+claimed address and a signature that verifies against a real key found in
+it; nothing here makes verification more permissive, only more honest
+about why it failed when it does.
+
+**Not independently verified in this pass** (documented per the escape-
+hatch instructions, not silently assumed): whether the specific wallets
+available at demo time (Ready, Argent, Braavos in their current versions)
+actually implement `wallet_deploymentData` for a genuinely fresh,
+never-transacted account. If Generate still fails for such a wallet in
+production, the server log now says exactly which stage failed
+(`missing_deployment_data` if the wallet simply doesn't support the RPC
+method — the escape hatch then is "deploy the account with one small
+transaction first, then Generate," which still requires no in-app
+shield/deposit and no weakened check) — read that stage before changing
+anything further.
+
 ## Pre-demo QA (hostile pass, judge + malicious-user mindset)
 
 A full audit of every user-visible path and API endpoint — wallet connect,

@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { evaluatePredicate } from "@/lib/predicate";
 import { pedersen, signAttestation, deriveNullifier } from "@/lib/attestation";
-import { verifyPassOwnership, type PassDeploymentData } from "@/lib/passChallenge";
+import { verifyPassOwnership, OwnershipVerificationError, type PassDeploymentData } from "@/lib/passChallenge";
 import { provider } from "@/lib/starknet";
 import { decidePassIssuance } from "@/lib/passDecision";
 
@@ -29,7 +29,7 @@ export async function POST(req: NextRequest) {
     const body = await req.json();
     const campaignId: string = body.campaignId;
     const proverAddress: string = body.proverAddress; // the address whose deposit history is checked
-    const signature: string[] = body.signature; // wallet_signTypedData over issuePassTypedData(campaignId)
+    const signature: unknown = body.signature; // wallet_signTypedData over issuePassTypedData(campaignId) — shape validated inside verifyPassOwnership
     const salt: string = body.salt ?? "0x" + Date.now().toString(16);
     // Optional: lock this pass to one destination wallet, chosen now instead
     // of at claim time. Turns the default pure-bearer capability into a
@@ -45,7 +45,12 @@ export async function POST(req: NextRequest) {
     if (!campaignId || !proverAddress) {
       return NextResponse.json({ ok: false, error: "campaignId and proverAddress required" }, { status: 400 });
     }
-    if (!Array.isArray(signature) || signature.length === 0) {
+    // Just presence here — the actual shape (array of 2, or an {r,s}
+    // object) is validated inside verifyPassOwnership's normalizeSignature,
+    // which is also where an unrecognized shape gets a clear
+    // "signature_shape" stage instead of being rejected here before it's
+    // even looked at.
+    if (signature === undefined || signature === null) {
       return NextResponse.json(
         { ok: false, error: "signature required — sign the issuance challenge with proverAddress's wallet" },
         { status: 400 }
@@ -66,31 +71,26 @@ export async function POST(req: NextRequest) {
     // this address," never "you're not eligible." Conflating the two once
     // meant a broken typed-data shape looked identical to "not eligible" in
     // the UI, when every single request was actually failing before
-    // eligibility was ever checked.
-    let controlsAddress: boolean;
+    // eligibility was ever checked. verifyPassOwnership throws
+    // OwnershipVerificationError tagged with exactly which stage broke
+    // (typed_data / signature_shape / rpc / onchain / missing_deployment_data
+    // / deploy_commit / offchain) — logged and returned structured so a
+    // failure here is diagnosable, never a silent generic 401.
     try {
-      controlsAddress = await verifyPassOwnership(provider(), campaignId, proverAddress, signature, deploymentData);
+      await verifyPassOwnership(provider(), campaignId, proverAddress, signature, deploymentData);
     } catch (err) {
-      console.error(
-        "[/api/pass] ownership signature verification threw (typed-data/schema/RPC error, not an eligibility failure):",
-        err instanceof Error ? err.message : String(err)
-      );
+      const stage = err instanceof OwnershipVerificationError ? err.stage : "unknown";
+      const detail = err instanceof Error ? err.message : String(err);
+      console.error("[/api/pass] ownership verification failed:", {
+        proverAddress,
+        campaignId,
+        stage,
+        detail,
+        signatureLength: Array.isArray(signature) ? signature.length : typeof signature,
+        hasDeploymentData: !!deploymentData,
+      });
       return NextResponse.json(
-        {
-          ok: false,
-          error: "invalid_ownership_signature",
-          detail: "typed data failed verification",
-        },
-        { status: 401 }
-      );
-    }
-    if (!controlsAddress) {
-      return NextResponse.json(
-        {
-          ok: false,
-          error: "invalid_ownership_signature",
-          detail: "signature does not prove control of proverAddress for this campaign",
-        },
+        { ok: false, error: "invalid_ownership_signature", stage, detail },
         { status: 401 }
       );
     }
