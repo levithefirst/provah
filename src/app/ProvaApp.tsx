@@ -3,7 +3,7 @@
 import { useEffect, useRef, useState } from "react";
 import { connect, disconnect, type StarknetWindowObject } from "@starknet-io/get-starknet";
 import { RpcProvider, hash, num } from "starknet";
-import { issuePassTypedData, type PassDeploymentData } from "@/lib/passChallenge";
+import { issuePassTypedData, normalizePassDeploymentData, type PassDeploymentData } from "@/lib/passChallenge";
 import { evaluateDepositCount, evaluateHeldSince, isAlwaysTruePredicate } from "@/lib/predicateMath";
 import { decodePassToken, encodePassToken } from "@/lib/passToken";
 import QRCode from "qrcode";
@@ -596,10 +596,19 @@ export default function ProvaApp() {
       .then((result) => {
         if (cancelled) return;
         setSelfCheck(result.eligible ? "eligible" : "ineligible");
+        // Always-true predicates (the Capability Smoke Test) short-circuit
+        // before reading any deposit history at all — result.count/total
+        // are just placeholder zeros, not a real measurement. Saying
+        // "0 deposit(s) found" here reads as a stale/wrong number to
+        // anyone who has actually deposited (real STRK sent, self-check
+        // still shows 0) when the truth is simpler: this campaign doesn't
+        // check deposits at all, so there's nothing to report finding.
         setSelfCheckDetail(
-          campaign.predicate_type === "deposit_count"
-            ? `${result.count} deposit(s) found, need ${campaign.predicate_min_amount}.`
-            : `${formatStrk(result.total.toString())} qualifying, need ${formatStrk(campaign.predicate_min_amount)}.`
+          isAlwaysTruePredicate(campaign.predicate_type, BigInt(campaign.predicate_min_amount))
+            ? "No deposit check required for this campaign — every wallet qualifies."
+            : campaign.predicate_type === "deposit_count"
+              ? `${result.count} deposit(s) found, need ${campaign.predicate_min_amount}.`
+              : `${formatStrk(result.total.toString())} qualifying, need ${formatStrk(campaign.predicate_min_amount)}.`
         );
       })
       .catch(() => {
@@ -721,12 +730,14 @@ export default function ProvaApp() {
       // that, instead of a generic signature-failure message.
       let deploymentData: PassDeploymentData | null = null;
       try {
-        const dd = (await proverWalletHandle.request({ type: "wallet_deploymentData" })) as {
-          class_hash: string;
-          salt: string;
-          calldata: string[];
-        };
-        deploymentData = { classHash: dd.class_hash, salt: dd.salt, calldata: dd.calldata };
+        // normalizePassDeploymentData accepts the wallet-api spec's
+        // snake_case fields or the camelCase/alternate names some wallet
+        // adapters actually send — see its own doc comment.
+        const dd = await proverWalletHandle.request({ type: "wallet_deploymentData" });
+        deploymentData = normalizePassDeploymentData(dd);
+        if (dd && !deploymentData) {
+          console.warn("[Generate] wallet_deploymentData returned but could not be normalized:", dd);
+        }
       } catch (err) {
         console.warn(
           "[Generate] wallet_deploymentData unavailable (fine if this wallet is already deployed):",

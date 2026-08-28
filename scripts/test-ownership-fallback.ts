@@ -21,10 +21,14 @@
  * from whatever verifyMessageInStarknet happens to throw, every failure is
  * tagged with a specific stage instead of one generic 401 (see
  * OwnershipFailureStage in passChallenge.ts), and a signature array with
- * more than 2 elements (some wallets prepend a version byte or append
- * guardian/session-key data) is tried as both the first-two and last-two
- * felts rather than rejected outright — each candidate still has to pass
- * real verification to be accepted.
+ * more than 2 elements (some wallets prepend a version byte, append
+ * guardian/session-key data, or bury the real [r, s] pair in the middle
+ * for a multi-signer account) is tried as EVERY consecutive pair — not
+ * just first-two/last-two — rather than rejected outright. The deployed
+ * (on-chain) path also tries the full original array as its own candidate
+ * first, since a multi-signer account's is_valid_signature can require
+ * seeing the complete wallet array rather than a bare [r, s] slice. Every
+ * candidate still has to pass real verification to be accepted.
  *
  * Uses only starknet.js and the real, shared verifyPassOwnership() — no
  * wallet, no database, no live RPC (fake providers below reproduce the
@@ -34,7 +38,13 @@
 import assert from "node:assert/strict";
 import { ec, hash, typedData as starknetTypedData } from "starknet";
 import type { RpcProvider } from "starknet";
-import { issuePassTypedData, verifyPassOwnership, OwnershipVerificationError, type PassDeploymentData } from "../src/lib/passChallenge";
+import {
+  issuePassTypedData,
+  verifyPassOwnership,
+  normalizePassDeploymentData,
+  OwnershipVerificationError,
+  type PassDeploymentData,
+} from "../src/lib/passChallenge";
 
 const CAMPAIGN_ID = "0x2df11a90c5a246beb0c7b59cc13e3d73e3c7ae1de5a00f9d71bee9fb2720582";
 
@@ -118,6 +128,22 @@ async function main() {
     );
   });
 
+  console.log("\nDeployed-account path: full wallet array as a candidate");
+  await check("a deployed multi-signer account gets the FULL signature array, not just a 2-element slice", async () => {
+    const seen: unknown[] = [];
+    const multiSignerProvider = {
+      getClassHashAt: async () => "0xabc",
+      verifyMessageInStarknet: async (_msg: unknown, sig: unknown) => {
+        seen.push(sig);
+        // Only accepts the exact full 4-element array — a 2-element slice
+        // must never satisfy this on its own.
+        return Array.isArray(sig) && sig.length === 4;
+      },
+    } as unknown as RpcProvider;
+    await verifyPassOwnership(multiSignerProvider, CAMPAIGN_ID, address, ["0x1", ...signature, "0x9"], null);
+    assert.ok(seen.some((s) => Array.isArray(s) && s.length === 4), "expected the full 4-element array to be tried");
+  });
+
   console.log("\nUndeployed-account path: positive");
   await check("counterfactual account, real signature, real deploymentData -> accepts", async () => {
     await verifyPassOwnership(undeployedProvider(), CAMPAIGN_ID, address, signature, deploymentData);
@@ -179,6 +205,19 @@ async function main() {
       "offchain"
     );
   });
+  await check("a 5-element array with the real [r, s] BURIED IN THE MIDDLE still verifies", async () => {
+    // Mirrors a guardian-enabled account-abstraction signature shape, e.g.
+    // [num_signers, type, pubkey, r, s] — the owner's real pair sits at
+    // indices 2,3 here, which is neither the first-two nor the last-two
+    // slice. Only trying every consecutive pair catches this.
+    await verifyPassOwnership(
+      undeployedProvider(),
+      CAMPAIGN_ID,
+      address,
+      ["0x1", "0x2", ...signature, "0x9"],
+      deploymentData
+    );
+  });
   await check("a single-element array is rejected with stage 'signature_shape' (too short to contain [r, s])", async () => {
     await assertRejectsWithStage(
       verifyPassOwnership(undeployedProvider(), CAMPAIGN_ID, address, [signature[0]], deploymentData),
@@ -190,6 +229,29 @@ async function main() {
       verifyPassOwnership(undeployedProvider(), CAMPAIGN_ID, address, [], deploymentData),
       "signature_shape"
     );
+  });
+
+  console.log("\ndeploymentData field-name normalization");
+  await check("camelCase deploymentData (classHash/constructorCalldata) normalizes and verifies", async () => {
+    const raw = { classHash, salt, constructorCalldata: calldata };
+    const normalized = normalizePassDeploymentData(raw);
+    assert.ok(normalized);
+    assert.equal(BigInt(normalized.classHash), BigInt(classHash));
+    assert.equal(BigInt(normalized.salt), BigInt(salt));
+    assert.deepEqual(normalized.calldata, calldata);
+    await verifyPassOwnership(undeployedProvider(), CAMPAIGN_ID, address, signature, normalized);
+  });
+  await check("snake_case deploymentData (class_hash/constructor_calldata) normalizes and verifies", async () => {
+    const raw = { class_hash: classHash, salt, constructor_calldata: calldata };
+    const normalized = normalizePassDeploymentData(raw);
+    assert.ok(normalized);
+    assert.equal(BigInt(normalized.classHash), BigInt(classHash));
+  });
+  await check("deploymentData missing calldata entirely normalizes to null, not a partial object", () => {
+    assert.equal(normalizePassDeploymentData({ classHash, salt }), null);
+  });
+  await check("a non-object (e.g. undefined) normalizes to null", () => {
+    assert.equal(normalizePassDeploymentData(undefined), null);
   });
 
   console.log("\nRPC failure while determining deployment status");

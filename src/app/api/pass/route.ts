@@ -2,7 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { evaluatePredicate } from "@/lib/predicate";
 import { pedersen, signAttestation, deriveNullifier } from "@/lib/attestation";
-import { verifyPassOwnership, OwnershipVerificationError, issuePassTypedData, type PassDeploymentData } from "@/lib/passChallenge";
+import { verifyPassOwnership, OwnershipVerificationError, issuePassTypedData, normalizePassDeploymentData, type PassDeploymentData } from "@/lib/passChallenge";
 import { typedData as starknetTypedData } from "starknet";
 import { provider } from "@/lib/starknet";
 import { decidePassIssuance } from "@/lib/passDecision";
@@ -31,7 +31,10 @@ export async function POST(req: NextRequest) {
     const signature: unknown = body.signature;
     const salt: string = body.salt ?? "0x" + Date.now().toString(16);
     const boundRecipient: string | null = body.boundRecipient || null;
-    const deploymentData: PassDeploymentData | null = body.deploymentData ?? null;
+    // Accepts either the wallet-api spec's snake_case fields or the
+    // camelCase/alternate names some wallet adapters actually send — see
+    // normalizePassDeploymentData's own comment for why this matters.
+    const deploymentData: PassDeploymentData | null = normalizePassDeploymentData(body.deploymentData);
 
     if (!campaignId || !proverAddress) {
       return NextResponse.json({ ok: false, error: "campaignId and proverAddress required" }, { status: 400 });
@@ -50,34 +53,19 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // Reject malformed deployment data as an ownership-proof failure rather
-    // than letting undefined values reach calculateContractAddressFromHash
-    // and turn into a generic 500. This is especially useful with wallets
-    // that expose wallet_deploymentData through different adapter layers.
-    if (deploymentData !== null) {
-      const d = deploymentData as Partial<PassDeploymentData>;
-      if (
-        typeof d.classHash !== "string" ||
-        typeof d.salt !== "string" ||
-        !Array.isArray(d.calldata) ||
-        d.calldata.some((felt) => typeof felt !== "string")
-      ) {
-        const diagnostics = deploymentDataDiagnostics(deploymentData);
-        console.error("[/api/pass] malformed deploymentData:", {
-          proverAddress,
-          campaignId,
-          ...diagnostics,
-        });
-        return NextResponse.json(
-          {
-            ok: false,
-            error: "invalid_ownership_signature",
-            stage: "deploy_commit",
-            detail: "deploymentData must contain string classHash, string salt, and string[] calldata",
-          },
-          { status: 401 }
-        );
-      }
+    // No manual shape re-validation needed here: normalizePassDeploymentData
+    // above already guarantees deploymentData is either null or a complete,
+    // string-typed { classHash, salt, calldata } — verifyPassOwnership's own
+    // "missing_deployment_data" stage covers the null case with a clear
+    // message, and logs below capture the raw shape actually received for
+    // diagnosing a wallet whose deploymentData normalizePassDeploymentData
+    // itself couldn't make sense of.
+    if (body.deploymentData && !deploymentData) {
+      console.warn("[/api/pass] deploymentData present but could not be normalized:", {
+        proverAddress,
+        campaignId,
+        ...deploymentDataDiagnostics(body.deploymentData),
+      });
     }
 
     try {

@@ -26,6 +26,44 @@ export type PassDeploymentData = {
   calldata: string[];
 };
 
+function firstFelt(...vals: unknown[]): string | null {
+  for (const v of vals) {
+    if (v === undefined || v === null || v === "") continue;
+    try {
+      return num.toHex(v as string);
+    } catch {
+      continue;
+    }
+  }
+  return null;
+}
+
+/**
+ * The wallet-api spec (@starknet-io/types-js) uses snake_case
+ * (class_hash), but wallets have been observed returning camelCase
+ * (classHash) or naming constructor calldata differently
+ * (constructorCalldata / constructor_calldata) depending on their adapter
+ * layer. Reading only the spec's exact field name means a wallet using a
+ * different convention silently produces undefined fields — which
+ * JSON.stringify then drops from the POST body entirely, turning into a
+ * deploy_commit failure on the server that has nothing to do with the
+ * account itself. Accepts either convention; returns null (not a partial,
+ * partially-undefined object) if none of them yield a complete triple.
+ */
+export function normalizePassDeploymentData(raw: unknown): PassDeploymentData | null {
+  if (!raw || typeof raw !== "object") return null;
+  const o = raw as Record<string, unknown>;
+  const classHash = firstFelt(o.classHash, o.class_hash);
+  const salt = firstFelt(o.salt, o.addressSalt, o.address_salt);
+  const rawCalldata = o.calldata ?? o.constructorCalldata ?? o.constructor_calldata;
+  if (!classHash || !salt || !Array.isArray(rawCalldata)) return null;
+  try {
+    return { classHash, salt, calldata: rawCalldata.map((v) => num.toHex(v as string)) };
+  } catch {
+    return null;
+  }
+}
+
 export type OwnershipFailureStage =
   | "typed_data"
   | "signature_shape"
@@ -70,6 +108,27 @@ function tryVerifyAgainstCandidateFelt(
 
 const RPC_CONTRACT_NOT_FOUND = 20;
 
+// starknet.js's own RpcError exposes the JSON-RPC error code as a top-level
+// `.code` getter (confirmed by reading its source), but this checks a
+// couple of plausible nested shapes too (`.error.code`, `.baseError.code`,
+// `.data.code`) as cheap defense-in-depth in case some other layer (a
+// proxy, an older/alternate provider) wraps it differently.
+function rpcErrorCode(err: unknown): number | undefined {
+  const e = err as
+    | { code?: number | string; error?: { code?: number | string }; baseError?: { code?: number | string }; data?: { code?: number | string } }
+    | null;
+  const raw = e?.code ?? e?.error?.code ?? e?.baseError?.code ?? e?.data?.code;
+  if (typeof raw === "number") return raw;
+  if (typeof raw === "string" && /^\d+$/.test(raw)) return Number(raw);
+  return undefined;
+}
+
+function looksUndeployed(err: unknown): boolean {
+  if (rpcErrorCode(err) === RPC_CONTRACT_NOT_FOUND) return true;
+  const msg = err instanceof Error ? err.message : String(err);
+  return /contract not found|is not deployed|uninitialized contract|class hash not found/i.test(msg);
+}
+
 async function isAccountDeployed(provider: RpcProvider, address: string): Promise<boolean> {
   try {
     const classHash = await provider.getClassHashAt(address);
@@ -79,10 +138,8 @@ async function isAccountDeployed(provider: RpcProvider, address: string): Promis
     if (classHash && BigInt(classHash) === BigInt(0)) return false;
     return true;
   } catch (err) {
-    const code = (err as { code?: number } | null)?.code;
-    if (code === RPC_CONTRACT_NOT_FOUND) return false;
+    if (looksUndeployed(err)) return false;
     const msg = err instanceof Error ? err.message : String(err);
-    if (/contract not found|is not deployed|uninitialized contract/i.test(msg)) return false;
     throw new OwnershipVerificationError(
       "rpc",
       `could not determine whether ${address} is deployed: ${msg}`
@@ -90,6 +147,19 @@ async function isAccountDeployed(provider: RpcProvider, address: string): Promis
   }
 }
 
+/**
+ * Account-abstraction wallets (Ready, Argent, Braavos) often wrap the real
+ * owner [r, s] pair inside a longer array — e.g. a guardian-enabled account
+ * can return [num_signers, type, pubkey, r, s, guardian_type,
+ * guardian_pubkey, guardian_r, guardian_s], putting the owner's real pair
+ * in the MIDDLE of the array, not at either end. Trying only the first-two
+ * and last-two slices (the previous version of this function) misses that
+ * case entirely. This tries every consecutive pair instead — still no
+ * weaker a check than before: each candidate still has to pass real ECDSA
+ * verification (on-chain is_valid_signature, or the off-chain check
+ * against deploymentData) to be accepted, this just widens which slice of
+ * the array gets a chance to be tried.
+ */
 function candidateSignaturePairs(signature: unknown): string[][] {
   try {
     if (Array.isArray(signature)) {
@@ -101,9 +171,16 @@ function candidateSignaturePairs(signature: unknown): string[][] {
       }
       const hexed = signature.map((v) => num.toHex(v as string));
       if (hexed.length === 2) return [hexed];
-      const lastTwo = hexed.slice(-2);
-      const firstTwo = hexed.slice(0, 2);
-      return lastTwo[0] === firstTwo[0] && lastTwo[1] === firstTwo[1] ? [lastTwo] : [lastTwo, firstTwo];
+      const candidates: string[][] = [];
+      const seen = new Set<string>();
+      for (let i = 0; i <= hexed.length - 2; i++) {
+        const pair = [hexed[i], hexed[i + 1]];
+        const key = `${pair[0]}|${pair[1]}`;
+        if (seen.has(key)) continue;
+        seen.add(key);
+        candidates.push(pair);
+      }
+      return candidates;
     }
     if (signature && typeof signature === "object" && "r" in signature && "s" in signature) {
       const { r, s } = signature as { r: string; s: string };
@@ -152,8 +229,19 @@ export async function verifyPassOwnership(
   });
 
   if (deployed) {
+    // A deployed multi-signer account (Braavos/Argent with a guardian) can
+    // require its is_valid_signature entrypoint to see the FULL wallet
+    // array (e.g. [num_signers, type, pubkey, r, s, guardian_type, ...]),
+    // not just a 2-element [r, s] slice — the contract itself decides how
+    // to parse it. Try the full array first, then every 2-element slice.
+    const onchainCandidates: string[][] = [];
+    if (Array.isArray(signatureInput) && signatureInput.length > 2) {
+      onchainCandidates.push(signatureInput.map((v) => num.toHex(v as string)));
+    }
+    onchainCandidates.push(...signatureCandidates);
+
     let rpcError: unknown;
-    for (const candidate of signatureCandidates) {
+    for (const candidate of onchainCandidates) {
       try {
         if (await provider.verifyMessageInStarknet(message, candidate, proverAddress)) return;
       } catch (err) {
