@@ -16,11 +16,23 @@ import { decideClaim } from "@/lib/claimDecision";
  * verifies and the nullifier registry consumes exactly once.
  */
 export async function POST(req: NextRequest) {
+  // Temporary diagnostic trail (P0: silent claim failures reported after the
+  // attester rotation) — every line here is boolean/metadata only, never a
+  // secret value, so it's safe to leave in server logs. The goal is to make
+  // the NEXT failed claim attempt point at an exact stage instead of one
+  // generic client-side "unreachable" message that collapses every failure
+  // mode (network error, timeout, thrown exception) into the same text.
+  console.log("[/api/claim] request received");
   try {
     const body = await req.json();
     const campaignId: string = body.campaignId;
     const nullifier: string = body.nullifier;
     const recipient: string = body.recipient;
+    console.log("[/api/claim] validation stage reached", {
+      hasCampaignId: !!campaignId,
+      hasNullifier: !!nullifier,
+      hasRecipient: !!recipient,
+    });
 
     if (!campaignId || !nullifier || !recipient) {
       return NextResponse.json(
@@ -42,6 +54,7 @@ export async function POST(req: NextRequest) {
     // claim attempt failed the same way and permanently stuck the pass.
     // Failing here means the pass is never touched at all when Prova
     // itself isn't configured to sign.
+    console.log("[/api/claim] attester key present:", !!PROVA_ATTESTER_PRIVATE_KEY);
     if (!PROVA_ATTESTER_PRIVATE_KEY) {
       console.error("[/api/claim] PROVA_ATTESTER_PRIVATE_KEY is not set — refusing before touching the pass");
       return NextResponse.json(
@@ -54,6 +67,10 @@ export async function POST(req: NextRequest) {
         { status: 503 }
       );
     }
+    console.log("[/api/claim] starknet operator vars present:", {
+      account: !!STARKNET_ACCOUNT_ADDRESS,
+      privateKey: !!STARKNET_PRIVATE_KEY,
+    });
     if (!STARKNET_ACCOUNT_ADDRESS || !STARKNET_PRIVATE_KEY) {
       console.error("[/api/claim] STARKNET_ACCOUNT_ADDRESS/STARKNET_PRIVATE_KEY not set — refusing before touching the pass");
       return NextResponse.json(
@@ -171,6 +188,7 @@ export async function POST(req: NextRequest) {
     let sig: { r: string; s: string };
     try {
       sig = signAttestation(BigInt(campaignId), BigInt(nullifier), BigInt(recipient));
+      console.log("[/api/claim] attester signature generated successfully");
     } catch (err) {
       await unlock();
       const detail = err instanceof Error ? err.message : String(err);
@@ -183,6 +201,7 @@ export async function POST(req: NextRequest) {
 
     let transaction_hash: string;
     try {
+      console.log("[/api/claim] submitting claim_with_prova_pass to Starknet...");
       transaction_hash = await withOperatorLock(async () => {
         const account = operatorAccount();
         const contract = new Contract({
@@ -198,13 +217,26 @@ export async function POST(req: NextRequest) {
           sig.s,
         ]);
         const { transaction_hash } = await account.execute(call);
+        // Logged as soon as the submission itself succeeds — a tx hash here
+        // means the transaction is already out on the network regardless of
+        // whether the waitForTransaction below (or this whole function) gets
+        // to finish before Vercel's execution time budget runs out. This is
+        // the exact fact a timed-out invocation would otherwise leave no
+        // trace of: nothing client-side distinguishes "never submitted" from
+        // "submitted, but the function died before confirming it."
+        console.log("[/api/claim] transaction submitted, tx hash:", transaction_hash);
         await provider().waitForTransaction(transaction_hash);
+        console.log("[/api/claim] transaction confirmed:", transaction_hash);
         return transaction_hash;
       });
     } catch (err) {
       // The on-chain submission itself failed (nonce race, RPC error,
       // reverted transaction) — unlock so the pass is retryable rather than
       // stuck in 'claiming' forever, then report the real error.
+      console.error("[/api/claim] on-chain submission failed:", {
+        name: err instanceof Error ? err.constructor.name : typeof err,
+        message: err instanceof Error ? err.message : String(err),
+      });
       await unlock();
       throw err;
     }
@@ -246,6 +278,17 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({ ok: true, txHash: transaction_hash });
   } catch (err) {
+    // Previously silent — this outer catch is what turns a Vercel function
+    // timeout, a thrown RPC error, or any other unhandled exception into a
+    // generic 500 with no server-side trace of what actually happened. Every
+    // other catch block in this route logs before returning; this is the
+    // one gap where a real failure could vanish without a log line, so it's
+    // now the last thing checked when a claim looks like it "failed" for no
+    // visible reason.
+    console.error("[/api/claim] top-level error:", {
+      name: err instanceof Error ? err.constructor.name : typeof err,
+      message: err instanceof Error ? err.message : String(err),
+    });
     const message = err instanceof Error ? err.message : String(err);
     return NextResponse.json({ ok: false, error: message }, { status: 500 });
   }

@@ -306,6 +306,26 @@ function ownershipFailureMessage(stage: string | undefined, detail: string | und
   }
 }
 
+// Every Generate/Claim/Redeem handler's outer catch used to collapse a
+// rejected wallet signature, a dropped network connection, and a server
+// response that wasn't valid JSON (the exact shape of a Vercel function
+// timeout — the platform's own error page isn't JSON, so res.json() itself
+// throws a SyntaxError) into one identical, generic message. That made a
+// real backend failure indistinguishable from "you clicked cancel" —
+// this at least tells the three apart from what the browser actually threw.
+function describeCaughtError(err: unknown): string {
+  if (err instanceof Error && /reject|denied|cancel/i.test(err.message)) {
+    return "the wallet declined the request";
+  }
+  if (err instanceof SyntaxError) {
+    return "Provah's server responded without valid JSON — likely a timeout or crash mid-request; the action may have partially completed server-side";
+  }
+  if (err instanceof TypeError) {
+    return "the network request to Provah failed (offline, blocked, or Provah is unreachable)";
+  }
+  return err instanceof Error ? err.message : String(err);
+}
+
 function short(addr: string | null | undefined) {
   if (!addr) return "none";
   return addr.slice(0, 6) + "…" + addr.slice(-4);
@@ -1219,8 +1239,9 @@ export default function ProvaApp() {
           );
         }
       }
-    } catch {
-      setStatus("Wallet declined to sign, or Provah was unreachable.");
+    } catch (err) {
+      console.error("[Generate] request failed:", err);
+      setStatus(`Generate failed: ${describeCaughtError(err)}.`);
     } finally {
       actionInFlightRef.current = false;
       setBusyAction("idle");
@@ -1282,8 +1303,11 @@ export default function ProvaApp() {
           }
         }
       }
-    } catch {
-      setStatus("Failed to reach Provah.");
+    } catch (err) {
+      console.error("[Claim] request failed:", err);
+      setStatus(
+        `Claim request failed: ${describeCaughtError(err)}. If this looked like a timeout, the transaction may have still gone through on-chain — check "Verify on-chain" for this pass before retrying.`
+      );
     } finally {
       actionInFlightRef.current = false;
       setBusyAction("idle");
@@ -1363,8 +1387,11 @@ export default function ProvaApp() {
           }
         }
       }
-    } catch {
-      setRedeemStatus("Failed to reach Provah.");
+    } catch (err) {
+      console.error("[Redeem] request failed:", err);
+      setRedeemStatus(
+        `Redeem request failed: ${describeCaughtError(err)}. If this looked like a timeout, the transaction may have still gone through on-chain — check "Verify on-chain" for this pass before retrying.`
+      );
     } finally {
       actionInFlightRef.current = false;
       setBusyAction("idle");
