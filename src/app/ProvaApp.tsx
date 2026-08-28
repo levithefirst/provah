@@ -10,7 +10,9 @@ import { claimFailureMessage } from "@/lib/claimCopy";
 import QRCode from "qrcode";
 import {
   AlertTriangle,
+  Check,
   CheckCircle2,
+  ChevronDown,
   Coins,
   Copy,
   ExternalLink,
@@ -509,6 +511,118 @@ function CapabilityFlow({
         No on-chain link, no shared address, no Provah-stored mapping between A and B. The pass
         itself is the only thing that crosses between them.
       </p>
+    </div>
+  );
+}
+
+/**
+ * A styled combobox for campaign 1 — a plain <select> looks fine on desktop
+ * but falls back to the OS's own bare radio-button sheet on mobile (see the
+ * screenshot that prompted this), which reads as unpolished next to the
+ * rest of the app. This renders its own floating list instead, built from
+ * a real <button> + listbox (role="listbox"/"option", arrow-key + Escape
+ * support) so it stays keyboard- and screen-reader-usable rather than just
+ * looking like a dropdown.
+ */
+function CampaignSelect({
+  campaigns,
+  loading,
+  selected,
+  onSelect,
+}: {
+  campaigns: Campaign[];
+  loading: boolean;
+  selected: string;
+  onSelect: (id: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const rootRef = useRef<HTMLDivElement | null>(null);
+  const current = campaigns.find((c) => c.id === selected) ?? null;
+
+  useEffect(() => {
+    if (!open) return;
+    function onPointerDown(e: PointerEvent) {
+      if (rootRef.current && !rootRef.current.contains(e.target as Node)) setOpen(false);
+    }
+    function onKey(e: KeyboardEvent) {
+      if (e.key === "Escape") setOpen(false);
+    }
+    document.addEventListener("pointerdown", onPointerDown);
+    document.addEventListener("keydown", onKey);
+    return () => {
+      document.removeEventListener("pointerdown", onPointerDown);
+      document.removeEventListener("keydown", onKey);
+    };
+  }, [open]);
+
+  const label = loading
+    ? "Loading campaigns…"
+    : !current
+      ? campaigns.length === 0
+        ? "No campaigns yet"
+        : "Select a campaign"
+      : `${current.name} (${predicateTypeTag(current.predicate_type)})${
+          isOpenAccessCampaign(current) ? " — no deposit needed" : ""
+        }`;
+
+  return (
+    <div ref={rootRef} className="relative w-full sm:w-auto">
+      <button
+        type="button"
+        role="combobox"
+        aria-expanded={open}
+        aria-haspopup="listbox"
+        disabled={loading || campaigns.length === 0}
+        onClick={() => setOpen((v) => !v)}
+        className="flex w-full items-center justify-between gap-3 rounded-md border border-neutral-300 bg-white px-3 py-2.5 text-left text-neutral-900 transition-colors focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/40 disabled:cursor-not-allowed disabled:opacity-60 sm:w-[26rem] dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-100"
+      >
+        <span className="truncate">{label}</span>
+        <ChevronDown
+          className={`h-4 w-4 shrink-0 text-neutral-400 transition-transform ${open ? "rotate-180" : ""}`}
+          strokeWidth={1.75}
+        />
+      </button>
+      {open && (
+        <ul
+          role="listbox"
+          className="animate-rise-in absolute z-20 mt-1.5 max-h-80 w-full overflow-auto rounded-lg border border-neutral-200 bg-white p-1.5 shadow-lg sm:w-[26rem] dark:border-neutral-800 dark:bg-neutral-900"
+        >
+          {campaigns.map((c) => {
+            const isSelected = c.id === selected;
+            return (
+              <li key={c.id} role="option" aria-selected={isSelected}>
+                <button
+                  type="button"
+                  onClick={() => {
+                    onSelect(c.id);
+                    setOpen(false);
+                  }}
+                  className={`flex w-full items-start gap-2 rounded-md px-3 py-2 text-left transition-colors ${
+                    isSelected
+                      ? "bg-accent/10 text-accent-ink"
+                      : "text-neutral-700 hover:bg-neutral-100 dark:text-neutral-300 dark:hover:bg-neutral-800"
+                  }`}
+                >
+                  <span className="mt-0.5 h-4 w-4 shrink-0">
+                    {isSelected && <Check className="h-4 w-4" strokeWidth={2} />}
+                  </span>
+                  <span className="flex min-w-0 flex-col">
+                    <span className="truncate text-sm font-medium">{c.name}</span>
+                    <span className="flex flex-wrap items-center gap-1 text-xs text-neutral-500 dark:text-neutral-500">
+                      {predicateTypeTag(c.predicate_type)}
+                      {isOpenAccessCampaign(c) && (
+                        <span className="rounded-full border border-accent/40 bg-accent/10 px-1.5 py-0.5 text-accent-ink">
+                          no deposit needed
+                        </span>
+                      )}
+                    </span>
+                  </span>
+                </button>
+              </li>
+            );
+          })}
+        </ul>
+      )}
     </div>
   );
 }
@@ -1039,24 +1153,15 @@ export default function ProvaApp() {
 
       <section className="flex flex-col gap-3 rounded-3xl border border-neutral-200 bg-white p-6 shadow-sm sm:p-8 dark:border-neutral-800 dark:bg-neutral-900/40 dark:shadow-none">
         <h2 className="text-lg font-medium">1. Pick a campaign</h2>
-        <select
-          className="w-full rounded-md border border-neutral-300 bg-white px-3 py-2.5 text-neutral-900 transition-colors focus:border-accent focus:outline-none focus:ring-2 focus:ring-accent/40 sm:w-auto dark:border-neutral-700 dark:bg-neutral-900 dark:text-neutral-100"
-          value={selected}
-          disabled={campaignsLoading}
-          onChange={(e) => {
-            setSelected(e.target.value);
+        <CampaignSelect
+          campaigns={campaigns}
+          loading={campaignsLoading}
+          selected={selected}
+          onSelect={(id) => {
+            setSelected(id);
             setPass(null);
           }}
-        >
-          {campaignsLoading && <option value="">Loading campaigns…</option>}
-          {!campaignsLoading && campaigns.length === 0 && <option value="">No campaigns yet</option>}
-          {campaigns.map((c) => (
-            <option key={c.id} value={c.id}>
-              {c.name} ({predicateTypeTag(c.predicate_type)})
-              {isOpenAccessCampaign(c) ? " — no deposit needed" : ""}
-            </option>
-          ))}
-        </select>
+        />
         {campaignsLoading && (
           <div className="animate-pulse rounded-md border border-neutral-200 bg-neutral-100 p-3 dark:border-neutral-800 dark:bg-neutral-900/60">
             <div className="h-3 w-2/3 rounded bg-neutral-200 dark:bg-neutral-800" />
