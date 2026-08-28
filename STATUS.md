@@ -425,6 +425,36 @@ transaction first, then Generate," which still requires no in-app
 shield/deposit and no weakened check) — read that stage before changing
 anything further.
 
+## UX: silent-looking Generate/Claim, no wallet disconnect button (fixed)
+
+**Symptom reported from a live demo-video attempt:** pressing "Generate
+pass" and approving the wallet signature just went back to showing
+"Generate pass" with no visible error or confirmation — looked like the
+button did nothing. Separately, there was no way to disconnect a wallet
+short of clicking Connect again and dismissing the picker (which doesn't
+actually clear get-starknet's stored session).
+
+**Root cause (Generate/Claim/Redeem "silent" failures):** the shared
+`status` banner that carries every action's result (success or failure)
+rendered exactly once, near the bottom of a long single-page layout —
+well below the Generate button in section 2, and below the claim button
+too. The request was completing normally (success or a real error) the
+whole time; the only bug was that the one place that said so was off
+-screen, so it read as unresponsive rather than as a result.
+
+**Fix:** the status banner now scrolls itself into view (smooth-scroll,
+centered) every time it changes, via a ref + `useEffect` keyed on
+`status`. This applies uniformly to Generate, Claim, and self-check
+messages — no change to any request/response logic, no change to what
+errors mean or when they fire, just making the existing feedback visible
+without a manual scroll (important on a phone recording a demo).
+
+**Fix (disconnect):** added an explicit "Disconnect" button next to each
+of the three wallet-connect buttons (Wallet A / Generate, Wallet B /
+Claim, Redeem), each calling get-starknet's own `disconnect()` and
+clearing the corresponding local wallet state — no more relying on
+dismissing the connect picker as a disconnect workaround.
+
 ## P0: attester key missing + "pass already claiming" stuck state (fixed)
 
 **Symptoms in production:** the first claim attempt on a pass failed with

@@ -530,6 +530,17 @@ export default function ProvaApp() {
   const busy = busyAction !== "idle";
   const [redeemToken, setRedeemToken] = useState("");
   const [redeemWallet, setRedeemWallet] = useState<string>("");
+  // The status banner is the only feedback for Generate/Claim/Redeem, but it
+  // renders once, near the bottom of a long page — pressing "Generate pass"
+  // above the fold updated it silently off-screen, which read as "nothing
+  // happened" (the button just goes back to its idle label) even when the
+  // request actually failed or succeeded. Scrolling it into view on every
+  // change makes every action's result actually visible without a manual
+  // scroll, on desktop or a phone recording a demo.
+  const statusRef = useRef<HTMLParagraphElement | null>(null);
+  useEffect(() => {
+    if (status) statusRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+  }, [status]);
   const [redeemTx, setRedeemTx] = useState<string | null>(null);
   // Which nullifier redeemTx belongs to — lets the Redeem button re-enable
   // for a genuinely different pasted token while still refusing to resubmit
@@ -710,6 +721,20 @@ export default function ProvaApp() {
     }
   }
 
+  // get-starknet has no "click away to disconnect" gesture — before this,
+  // the only way to switch wallets was to click Connect again and dismiss
+  // the picker, which merely fails to connect a new wallet without actually
+  // clearing the old one from get-starknet's own stored session.
+  async function handleDisconnectProver() {
+    try {
+      await disconnect();
+    } finally {
+      setProverWallet(null);
+      setProverWalletHandle(null);
+      setStatus("Wallet A disconnected.");
+    }
+  }
+
   async function handleGeneratePass() {
     if (!campaign || !proverWallet || !proverWalletHandle) return;
     if (lockPass && !lockRecipient.trim()) {
@@ -861,6 +886,15 @@ export default function ProvaApp() {
     }
   }
 
+  async function handleDisconnectClaimWallet() {
+    try {
+      await disconnect();
+    } finally {
+      setClaimWallet("");
+      setStatus("Wallet B disconnected.");
+    }
+  }
+
   async function handleClaim() {
     if (!campaign || !pass || !claimWallet || claimTx) return;
     if (actionInFlightRef.current) return; // guards against a double-click firing this twice
@@ -923,6 +957,15 @@ export default function ProvaApp() {
       if (addr) setRedeemWallet(addr);
     } catch {
       setRedeemStatus("Wallet connection failed or was rejected.");
+    }
+  }
+
+  async function handleDisconnectRedeemWallet() {
+    try {
+      await disconnect();
+    } finally {
+      setRedeemWallet("");
+      setRedeemStatus("Wallet disconnected.");
     }
   }
 
@@ -1134,6 +1177,15 @@ export default function ProvaApp() {
           >
             <Wallet className="h-4 w-4" strokeWidth={1.75} /> Connect wallet A
           </button>
+          {proverWallet && (
+            <button
+              onClick={handleDisconnectProver}
+              disabled={busy}
+              className="inline-flex items-center gap-1.5 rounded-md border border-neutral-300 px-3 py-2 text-sm text-neutral-600 transition-colors hover:border-neutral-400 hover:text-neutral-900 disabled:pointer-events-none disabled:opacity-50 dark:border-neutral-700 dark:text-neutral-400 dark:hover:border-neutral-500 dark:hover:text-neutral-100"
+            >
+              Disconnect
+            </button>
+          )}
           <span className="font-mono text-sm text-neutral-500 dark:text-neutral-400">{short(proverWallet)}</span>
         </div>
         <div className={proverWallet && selfCheck !== "idle" ? undefined : "min-h-[2.25rem]"}>
@@ -1267,6 +1319,15 @@ export default function ProvaApp() {
           >
             <Wallet className="h-4 w-4" strokeWidth={1.75} /> Connect wallet B
           </button>
+          {claimWallet && (
+            <button
+              onClick={handleDisconnectClaimWallet}
+              disabled={busy}
+              className="inline-flex items-center gap-1.5 rounded-md border border-neutral-300 px-3 py-2 text-sm text-neutral-600 transition-colors hover:border-neutral-400 hover:text-neutral-900 disabled:pointer-events-none disabled:opacity-50 dark:border-neutral-700 dark:text-neutral-400 dark:hover:border-neutral-500 dark:hover:text-neutral-100"
+            >
+              Disconnect
+            </button>
+          )}
           <span className="font-mono text-sm text-neutral-500 dark:text-neutral-400">{short(claimWallet)}</span>
         </div>
         {proverWallet && claimWallet && proverWallet === claimWallet && (
@@ -1348,7 +1409,10 @@ export default function ProvaApp() {
       </section>
 
       {status && (
-        <p className="animate-rise-in flex items-start gap-2 rounded-2xl border border-neutral-200 bg-neutral-50 px-5 py-4 text-sm text-neutral-600 dark:border-neutral-800 dark:bg-neutral-900/40 dark:text-neutral-400">
+        <p
+          ref={statusRef}
+          className="animate-rise-in flex items-start gap-2 rounded-2xl border border-neutral-200 bg-neutral-50 px-5 py-4 text-sm text-neutral-600 dark:border-neutral-800 dark:bg-neutral-900/40 dark:text-neutral-400"
+        >
           {busy && <Loader2 className="mt-0.5 h-4 w-4 shrink-0 animate-spin" strokeWidth={1.75} />}
           <span>{status}</span>
         </p>
@@ -1416,6 +1480,15 @@ export default function ProvaApp() {
           >
             <Wallet className="h-4 w-4" strokeWidth={1.75} /> Connect wallet
           </button>
+          {redeemWallet && (
+            <button
+              onClick={handleDisconnectRedeemWallet}
+              disabled={busy}
+              className="inline-flex items-center gap-1.5 rounded-md border border-neutral-300 px-3 py-2 text-sm text-neutral-600 transition-colors hover:border-neutral-400 hover:text-neutral-900 disabled:pointer-events-none disabled:opacity-50 dark:border-neutral-700 dark:text-neutral-400 dark:hover:border-neutral-500 dark:hover:text-neutral-100"
+            >
+              Disconnect
+            </button>
+          )}
           <span className="font-mono text-sm text-neutral-500 dark:text-neutral-400">{short(redeemWallet)}</span>
         </div>
         <button
