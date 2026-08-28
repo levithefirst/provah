@@ -2,54 +2,40 @@ import { NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
 import { evaluatePredicate } from "@/lib/predicate";
 import { pedersen, signAttestation, deriveNullifier } from "@/lib/attestation";
-import { verifyPassOwnership, OwnershipVerificationError, type PassDeploymentData } from "@/lib/passChallenge";
+import { verifyPassOwnership, OwnershipVerificationError, issuePassTypedData, type PassDeploymentData } from "@/lib/passChallenge";
+import { typedData as starknetTypedData } from "starknet";
 import { provider } from "@/lib/starknet";
 import { decidePassIssuance } from "@/lib/passDecision";
 
 // Postgres error code for "unique_violation" — see the pg driver docs.
-// https://www.postgresql.org/docs/current/errcodes-appendix.html
 const PG_UNIQUE_VIOLATION = "23505";
 
-/**
- * Issue a Prova Pass: evaluate the campaign's predicate against the caller's
- * OWN deposit history — actually proved now, not just claimed by a code
- * comment. The caller signs a SNIP-12 typed-data challenge binding this
- * campaign to their address (see issuePassTypedData); this endpoint
- * recomputes the identical hash and checks it against proverAddress's
- * on-chain is_valid_signature before reading any deposit history or issuing
- * anything. Without this, anyone who merely knew an eligible address —
- * itself public, since deposit history is public — could mint (and for
- * reward campaigns, redeem) a pass meant for that wallet. Deposit history
- * itself stays PUBLIC on-chain data; only the salt is never persisted.
- * Returns a signed, one-time capability the caller can hand to ANY wallet to
- * redeem — this endpoint never learns or stores which wallet will claim it.
- */
+function deploymentDataDiagnostics(value: unknown) {
+  if (!value || typeof value !== "object") return { present: false, keys: [] as string[] };
+  const record = value as Record<string, unknown>;
+  return {
+    present: true,
+    keys: Object.keys(record),
+    classHashType: typeof record.classHash,
+    saltType: typeof record.salt,
+    calldataType: Array.isArray(record.calldata) ? "array" : typeof record.calldata,
+    calldataLength: Array.isArray(record.calldata) ? record.calldata.length : null,
+  };
+}
+
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json();
     const campaignId: string = body.campaignId;
-    const proverAddress: string = body.proverAddress; // the address whose deposit history is checked
-    const signature: unknown = body.signature; // wallet_signTypedData over issuePassTypedData(campaignId) — shape validated inside verifyPassOwnership
+    const proverAddress: string = body.proverAddress;
+    const signature: unknown = body.signature;
     const salt: string = body.salt ?? "0x" + Date.now().toString(16);
-    // Optional: lock this pass to one destination wallet, chosen now instead
-    // of at claim time. Turns the default pure-bearer capability into a
-    // recipient-bound one — a real scope decision the issuer gets to make,
-    // not just a bearer-security disclaimer. Enforced server-side in
-    // /api/claim before the attester ever signs a different recipient.
     const boundRecipient: string | null = body.boundRecipient || null;
-    // Only needed for a wallet that has never transacted on-chain yet (see
-    // verifyPassOwnership) — omitted entirely for any already-deployed
-    // wallet, which is verified the normal on-chain way.
     const deploymentData: PassDeploymentData | null = body.deploymentData ?? null;
 
     if (!campaignId || !proverAddress) {
       return NextResponse.json({ ok: false, error: "campaignId and proverAddress required" }, { status: 400 });
     }
-    // Just presence here — the actual shape (array of 2, or an {r,s}
-    // object) is validated inside verifyPassOwnership's normalizeSignature,
-    // which is also where an unrecognized shape gets a clear
-    // "signature_shape" stage instead of being rejected here before it's
-    // even looked at.
     if (signature === undefined || signature === null) {
       return NextResponse.json(
         { ok: false, error: "signature required — sign the issuance challenge with proverAddress's wallet" },
@@ -64,30 +50,55 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // Kept separate from predicate/eligibility failures below: a typed-data
-    // schema error (e.g. a malformed SNIP-12 domain — see passChallenge.ts's
-    // top comment for the exact regression this guards against) or a
-    // genuinely invalid signature are both "we couldn't verify you control
-    // this address," never "you're not eligible." Conflating the two once
-    // meant a broken typed-data shape looked identical to "not eligible" in
-    // the UI, when every single request was actually failing before
-    // eligibility was ever checked. verifyPassOwnership throws
-    // OwnershipVerificationError tagged with exactly which stage broke
-    // (typed_data / signature_shape / rpc / onchain / missing_deployment_data
-    // / deploy_commit / offchain) — logged and returned structured so a
-    // failure here is diagnosable, never a silent generic 401.
+    // Reject malformed deployment data as an ownership-proof failure rather
+    // than letting undefined values reach calculateContractAddressFromHash
+    // and turn into a generic 500. This is especially useful with wallets
+    // that expose wallet_deploymentData through different adapter layers.
+    if (deploymentData !== null) {
+      const d = deploymentData as Partial<PassDeploymentData>;
+      if (
+        typeof d.classHash !== "string" ||
+        typeof d.salt !== "string" ||
+        !Array.isArray(d.calldata) ||
+        d.calldata.some((felt) => typeof felt !== "string")
+      ) {
+        const diagnostics = deploymentDataDiagnostics(deploymentData);
+        console.error("[/api/pass] malformed deploymentData:", {
+          proverAddress,
+          campaignId,
+          ...diagnostics,
+        });
+        return NextResponse.json(
+          {
+            ok: false,
+            error: "invalid_ownership_signature",
+            stage: "deploy_commit",
+            detail: "deploymentData must contain string classHash, string salt, and string[] calldata",
+          },
+          { status: 401 }
+        );
+      }
+    }
+
     try {
       await verifyPassOwnership(provider(), campaignId, proverAddress, signature, deploymentData);
     } catch (err) {
       const stage = err instanceof OwnershipVerificationError ? err.stage : "unknown";
       const detail = err instanceof Error ? err.message : String(err);
+      let msgHash = "unavailable";
+      try {
+        msgHash = starknetTypedData.getMessageHash(issuePassTypedData(campaignId), proverAddress);
+      } catch {
+        // The ownership verifier reports typed-data failures separately.
+      }
       console.error("[/api/pass] ownership verification failed:", {
         proverAddress,
         campaignId,
         stage,
         detail,
+        msgHash,
         signatureLength: Array.isArray(signature) ? signature.length : typeof signature,
-        hasDeploymentData: !!deploymentData,
+        deploymentData: deploymentDataDiagnostics(deploymentData),
       });
       return NextResponse.json(
         { ok: false, error: "invalid_ownership_signature", stage, detail },
@@ -98,10 +109,6 @@ export async function POST(req: NextRequest) {
     const { rows } = await db().query(`SELECT * FROM campaigns WHERE id = $1`, [campaignId]);
     const campaign = rows[0];
 
-    // Deterministic (no salt) commitment of (address, campaign) — lets us
-    // enforce "one pass per wallet per campaign" without ever storing the
-    // raw address, closing the gap where a caller could otherwise mint
-    // unlimited passes for one qualifying wallet by varying `salt` alone.
     const addressCommitment = campaign
       ? "0x" + pedersen(BigInt(proverAddress), BigInt(campaignId)).toString(16)
       : null;
@@ -142,6 +149,12 @@ export async function POST(req: NextRequest) {
         status: decision.status,
         error: decision.error,
       });
+      if (decision.status === 409) {
+        return NextResponse.json(
+          { ok: false, error: "This wallet already has a pass for this campaign — connect a new empty wallet" },
+          { status: 409 }
+        );
+      }
       return NextResponse.json({ ok: false, error: decision.error }, { status: decision.status });
     }
 
@@ -157,10 +170,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ ok: false, error: "predicate not satisfied", evidence }, { status: 403 });
     }
 
-    // Commitment only — never the raw prover address — so Prova itself can't
-    // later be forced to reveal which wallet satisfied the predicate.
     const issuerCommitment = "0x" + pedersen(BigInt(proverAddress), BigInt(salt)).toString(16);
-
     const expiresAt = new Date(Number(campaign.expiry) * 1000);
 
     try {
@@ -170,18 +180,10 @@ export async function POST(req: NextRequest) {
         [nullifierHex, campaignId, campaign.predicate_hash, issuerCommitment, "0x0", "0x0", expiresAt, boundRecipient, addressCommitment]
       );
     } catch (err) {
-      // Closes the race the SELECT-then-INSERT checks above can't: two
-      // concurrent requests (a double-click, two tabs) can both pass the
-      // pre-checks before either has inserted. Postgres's own unique index
-      // on (campaign_id, address_commitment) — see README "one pass per
-      // wallet per campaign" — is what actually decides who wins; this just
-      // turns the loser's raw constraint-violation error into the same
-      // clean 409 the pre-check already returns for the non-racing case,
-      // instead of an opaque 500.
       const pgCode = (err as { code?: string } | null)?.code;
       if (pgCode === PG_UNIQUE_VIOLATION) {
         return NextResponse.json(
-          { ok: false, error: "this wallet has already been issued a pass for this campaign" },
+          { ok: false, error: "This wallet already has a pass for this campaign — connect a new empty wallet" },
           { status: 409 }
         );
       }
@@ -194,8 +196,6 @@ export async function POST(req: NextRequest) {
       nullifier: nullifierHex,
       predicateHash: campaign.predicate_hash,
       boundRecipient,
-      // Unless boundRecipient was set, the recipient (fresh wallet) is chosen
-      // and signed at claim time, not here.
       message: boundRecipient
         ? `Pass issued, locked to ${boundRecipient}. Only that wallet can claim it.`
         : "Pass issued. Call /api/claim with { campaignId, nullifier, recipient } from any wallet to redeem it.",

@@ -776,16 +776,12 @@ export default function ProvaApp() {
           // The single most common "Generate looks broken" moment during a
           // demo: it worked once, then a retake (or re-testing) with the
           // SAME wallet on the SAME campaign correctly hits the one-pass-
-          // per-wallet-per-campaign guarantee. That's not a bug — but
-          // "Already issued: this wallet has already been issued a pass
-          // for this campaign" reads like an error, not an instruction.
-          // Spell out the fix in plain language instead of just echoing
-          // the server's error string.
-          setStatus(
-            data.error === "this wallet has already been issued a pass for this campaign"
-              ? "This wallet already has a pass for this campaign — one pass per wallet per campaign, by design. Connect a different, never-used wallet as Wallet A and Generate again."
-              : `Already issued: ${data.error}`
-          );
+          // per-wallet-per-campaign guarantee. That's not a bug — the
+          // server's own error string is already the plain-language fix
+          // ("...connect a new empty wallet"), not a raw error code, so
+          // it's shown as-is rather than re-wrapped with an "Already
+          // issued:" prefix that would make it read like an error again.
+          setStatus(data.error);
         } else if (res.status === 400 || res.status === 404) {
           setStatus(`This campaign can't issue a pass right now: ${data.error}`);
         } else {
