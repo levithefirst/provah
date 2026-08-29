@@ -200,5 +200,5 @@
   "demo_video": "https://x.com/levithefirst/status/2093702890044952686",
   "_demo_video_note": "RESOLVED: recorded and posted; DEMO.md's script (90s-3min, three beats: smoke-test flow for any wallet, real-predicate flow with a visible STRK balance delta, optional destination-lock fail-then-succeed) was used as the basis.",
   "_pool_tx_requirement_note": "RESOLVED: >=3 mainnet transactions that touched the STRK20 pool contract were required; 4 are now verified in strk20_pool_transactions above, each independently confirmed via this repo's own tx-status diagnostic (finality + execution status + the pool contract's own address as event emitter), not taken on the submitted hashes' word. All four were completed by the team through a privacy-enabled wallet's Wallet API (Ready/Braavos via Argent) — this project's own backend still cannot submit pool transactions directly; see STATUS.md, 'Still needed for >=3 pool txs', for why.",
-  "demo_url": "https://provah.vercel.app/"
+  "demo_url": "https://provah.vercel.app"
 }
