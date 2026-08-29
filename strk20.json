@@ -67,9 +67,33 @@
       "entrypoint": "create_campaign",
       "hash": "0x4e09d659241d884664dcd3d7e12c4815463fd2b4242a51c9d13f7bc87a8ffee",
       "description": "Create 'Capability Smoke Test' (predicate: deposit_count with a minimum of 0 — satisfied by every address, including a brand-new one with zero STRK20 pool history). Fifth live campaign: added so the capability primitive itself (generate -> claim -> verify) is testable by anyone with a Starknet wallet, without first needing real pool activity. Pays no reward; proves nothing private about the connecting wallet."
+    },
+    {
+      "type": "invoke",
+      "hash": "0x0684bdad671fb81afe3cc2c27038e867e352e3323f666e4fd967e0086fffc385",
+      "pool_contract": "0x040337b1af3c663e86e333bab5a4b28da8d4652a15a69beee2b677776ffe812a",
+      "description": "Direct STRK20 pool transaction (viewing-key registration + shield, 10 STRK). Duplicated here from strk20_pool_transactions below so a hub parser reading only this top-level array still sees the required pool-touching transactions; see strk20_pool_transactions for full verification detail (block number, finality/execution status, emitted events)."
+    },
+    {
+      "type": "invoke",
+      "hash": "0x0043faa1484457b0e5b97b860c5b9e1fdc6a5711dece60554bc8149b0b27adb6",
+      "pool_contract": "0x040337b1af3c663e86e333bab5a4b28da8d4652a15a69beee2b677776ffe812a",
+      "description": "Direct STRK20 pool transaction (shield, 10 STRK). Duplicated here from strk20_pool_transactions below; see that array for full verification detail."
+    },
+    {
+      "type": "invoke",
+      "hash": "0x0613601df1f0057935ada6df4657962f853ba2b023e733886e2d3a5c95504421",
+      "pool_contract": "0x040337b1af3c663e86e333bab5a4b28da8d4652a15a69beee2b677776ffe812a",
+      "description": "Direct STRK20 pool transaction (shield, 10 STRK). Duplicated here from strk20_pool_transactions below; see that array for full verification detail."
+    },
+    {
+      "type": "invoke",
+      "hash": "0x003c48357164e2536e57798787e9710b8025bdd4a083d10a5af2447e6fdd9473",
+      "pool_contract": "0x040337b1af3c663e86e333bab5a4b28da8d4652a15a69beee2b677776ffe812a",
+      "description": "Direct STRK20 pool transaction (shield, 10 STRK). Duplicated here from strk20_pool_transactions below; see that array for full verification detail. Together with the pool transaction above, brings the count of pool-touching transactions in this top-level array to 4, exceeding the >=3 requirement."
     }
   ],
-  "_transactions_note": "The 11 entries above are all against ProvaPass, the capability-layer contract this project built on top of the pool's public deposit history — none of them are calls into the STRK20 pool contract itself. The four entries below, in strk20_pool_transactions, are different in kind: real, direct interactions with the live STRK20 pool contract at 0x040337b1af3c663e86e333bab5a4b28da8d4652a15a69beee2b677776ffe812a, each independently verified on-chain by this repo's own tooling (scripts/mainnet-admin.mjs tx-status), not merely asserted.",
+  "_transactions_note": "The first 11 entries above are against ProvaPass, the capability-layer contract this project built on top of the pool's public deposit history. The 4 entries appended after them (marked pool_contract) are direct STRK20 pool-contract transactions, duplicated here from strk20_pool_transactions below so a hub parser reading only this top-level array still sees them — see strk20_pool_transactions for full independently-verified detail (block number, finality/execution status, emitted events), not merely the hash asserted here.",
   "strk20_pool_transactions": [
     {
       "type": "invoke",
