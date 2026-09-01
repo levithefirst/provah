@@ -1,6 +1,6 @@
 # Prova Pass
 
-**Live demo:** [provah.vercel.app](https://provah.vercel.app/) · **Contract:** [`0x74614e0cd54af7e59987a5d74fdd028209feff01fc20eca2934fe80b94db402`](https://starkscan.co/contract/0x74614e0cd54af7e59987a5d74fdd028209feff01fc20eca2934fe80b94db402) · **15 mainnet transactions (11 ProvaPass + 4 direct STRK20 pool transactions), 5 live campaigns (one needs no prior deposit), real STRK reward payouts on redeem:** see below · **Status:** [`STATUS.md`](STATUS.md) · **Demo video:** _not yet recorded — script ready in [`DEMO.md`](DEMO.md), see `strk20.json`'s `demo_video` field_
+**Live demo:** [provah.vercel.app](https://provah.vercel.app/) · **Contract:** [`0x74614e0cd54af7e59987a5d74fdd028209feff01fc20eca2934fe80b94db402`](https://starkscan.co/contract/0x74614e0cd54af7e59987a5d74fdd028209feff01fc20eca2934fe80b94db402) · **15 mainnet transactions (11 ProvaPass + 4 direct STRK20 pool transactions), 5 live campaigns (one needs no prior deposit), real STRK reward payouts on redeem:** see below · **Status:** [`STATUS.md`](STATUS.md) · **Demo video:** [x.com/levithefirst](https://x.com/levithefirst/status/2093702890044952686)
 
 > **Why Provah:** it turns provable STRK20 activity into a transferable,
 > optionally destination-locked, unlinkable capability — independently

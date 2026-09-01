@@ -11,11 +11,8 @@ const NAV_LINKS = [
   { href: "https://github.com/levithefirst/provah", label: "GitHub" },
 ];
 
-// Set to the recorded demo's URL once available (see strk20.json's
-// demo_video and STATUS.md's "BLOCKER: demo_video" note) — until then this
-// stays null so the nav shows an honest "coming soon" label instead of a
-// dead or fabricated link.
-const DEMO_VIDEO_URL: string | null = null;
+// Kept in sync with strk20.json's demo_video field.
+const DEMO_VIDEO_URL: string | null = "https://x.com/levithefirst/status/2093702890044952686";
 
 export default function Header() {
   const [open, setOpen] = useState(false);
