@@ -4,7 +4,7 @@
 
 **Turn provable STRK20 pool activity into a one-time capability that any other wallet can redeem, with gas sponsored and no on-chain link back to the wallet that qualified.**
 
-[Live demo](https://provah.vercel.app/) · [Contract on Starkscan](https://starkscan.co/contract/0x74614e0cd54af7e59987a5d74fdd028209feff01fc20eca2934fe80b94db402) · [Demo video](https://x.com/levithefirst/status/2093702890044952686) · [Status log](STATUS.md) · [`strk20.json`](strk20.json)
+[Live demo](https://provah.vercel.app/) · [Contract on Starkscan](https://starkscan.co/contract/0x74614e0cd54af7e59987a5d74fdd028209feff01fc20eca2934fe80b94db402) · [Demo video](https://x.com/levithefirst/status/2093702890044952686) · [`strk20.json`](strk20.json)
 
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
 [![Network: Starknet mainnet](https://img.shields.io/badge/network-Starknet%20mainnet-5b2cff.svg)](https://starkscan.co/contract/0x74614e0cd54af7e59987a5d74fdd028209feff01fc20eca2934fe80b94db402)
@@ -34,6 +34,7 @@ Built for the [STRK20 Private Sprint](https://github.com/starkience/strk20-hacka
 - [Running locally](#running-locally)
 - [Mainnet admin actions](#mainnet-admin-actions)
 - [On-chain record](#on-chain-record)
+- [Known limitations](#known-limitations)
 - [License and credits](#license-and-credits)
 
 ## Try it
@@ -125,7 +126,7 @@ Five campaigns run on the single deployed contract. This list matches `GET https
 
 Replacing the attestation with a client-side ZK proof needs STRK20's mainnet transaction prover (`starknet_proveTransaction`), and no public endpoint for it has been found. The hackathon repo has open issues from several teams asking for it: [#204](https://github.com/starkience/strk20-hackathon/issues/204), [#147](https://github.com/starkience/strk20-hackathon/issues/147) and [#121](https://github.com/starkience/strk20-hackathon/issues/121).
 
-A hand-built `apply_actions` fee estimate for `EmitViewingKeySet` reverted with the pool's own `EMPTY_PROOF_FACTS` error. That confirms every pool state change needs proof artifacts. The full transcript is in [`STATUS.md`](STATUS.md).
+A hand-built `apply_actions` fee estimate for `EmitViewingKeySet` reverted with the pool's own `EMPTY_PROOF_FACTS` error. That confirms every pool state change needs proof artifacts. The full transcript is in the [archived build log](https://github.com/levithefirst/provah/blob/da59b87c444d857c1bca2dc3611f3303fa44e241/STATUS.md).
 
 If a prover becomes reachable, the swap is backend-only:
 
@@ -152,6 +153,19 @@ In the browser, the app also:
 
 ## Architecture
 
+```mermaid
+flowchart LR
+    A["Wallet A"] -->|"address + salt"| Pass["/api/pass<br/>reads public Deposit events,<br/>evaluates predicate, stores pass"]
+    Pass --> PG[("Postgres")]
+    Pass -->|"bearer token<br/>campaignId, nullifier"| B["Wallet B"]
+    B -->|recipient| Claim["/api/claim<br/>signs, relays tx (gasless for B)"]
+    Claim --> C["ProvaPass.cairo<br/>Starknet mainnet<br/>verify ECDSA, consume nullifier,<br/>pay reward if set"]
+```
+
+<details>
+<summary>Text version</summary>
+
+
 ```
 [Wallet A] --address+salt--> /api/pass --reads public Deposit events, evaluates predicate,
                                           derives nullifier, stores pass (Postgres)
@@ -166,6 +180,8 @@ In the browser, the app also:
                      ProvaPass.cairo (Starknet mainnet)
                        verify ECDSA -> consume nullifier -> pay reward if reward_amount > 0
 ```
+
+</details>
 
 | Path | What's there |
 |---|---|
@@ -270,9 +286,17 @@ These four pool transactions were made by a person using a privacy-enabled walle
 - [`0x0613601d…04421`](https://voyager.online/tx/0x0613601df1f0057935ada6df4657962f853ba2b023e733886e2d3a5c95504421): block 13955965
 - [`0x003c4835…dd9473`](https://voyager.online/tx/0x003c48357164e2536e57798787e9710b8025bdd4a083d10a5af2447e6fdd9473): block 13956048
 
-Selector hashes and a note about an extra relay call that couldn't be decoded are in [`STATUS.md`](STATUS.md).
+Selector hashes and a note about an extra relay call that couldn't be decoded are in the [archived build log](https://github.com/levithefirst/provah/blob/da59b87c444d857c1bca2dc3611f3303fa44e241/STATUS.md).
 
 </details>
+
+## Known limitations
+
+- **The predicate check is a trusted server attestation, not a zero-knowledge proof.** Whoever holds the attester key (today, only Prova) could sign a pass for a predicate that does not hold.
+- **No public STRK20 mainnet prover was found** (`starknet_proveTransaction`), so the ZK swap described in [The prover gap](#the-prover-gap) is not done.
+- **Reward-campaign commitments are unsalted**, so anyone with database access could check whether a known address already holds a pass for that campaign.
+- **The database schema is not in the repo.** The code comments describe a unique index on `(campaign_id, address_commitment)` as a backstop, but it can't be checked from here.
+- **Predicates read only public `Deposit` events**, not shielded balances.
 
 ## License and credits
 
