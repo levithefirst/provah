@@ -1,569 +1,283 @@
+<div align="center">
+
 # Prova Pass
 
-**Live demo:** [provah.vercel.app](https://provah.vercel.app/) · **Contract:** [`0x74614e0cd54af7e59987a5d74fdd028209feff01fc20eca2934fe80b94db402`](https://starkscan.co/contract/0x74614e0cd54af7e59987a5d74fdd028209feff01fc20eca2934fe80b94db402) · **15 mainnet transactions (11 ProvaPass + 4 direct STRK20 pool transactions), 5 live campaigns (one needs no prior deposit), real STRK reward payouts on redeem:** see below · **Status:** [`STATUS.md`](STATUS.md) · **Demo video:** [x.com/levithefirst](https://x.com/levithefirst/status/2093702890044952686)
+**Turn provable STRK20 pool activity into a one-time capability that any other wallet can redeem, with gas sponsored and no on-chain link back to the wallet that qualified.**
 
-> **Why Provah:** it turns provable STRK20 activity into a transferable,
-> optionally destination-locked, unlinkable capability — independently
-> verifiable, and backed by a real STRK20 pool transaction and a live
-> mainnet capability contract, not just a signed promise.
+[Live demo](https://provah.vercel.app/) · [Contract on Starkscan](https://starkscan.co/contract/0x74614e0cd54af7e59987a5d74fdd028209feff01fc20eca2934fe80b94db402) · [Demo video](https://x.com/levithefirst/status/2093702890044952686) · [Status log](STATUS.md) · [`strk20.json`](strk20.json)
 
-**The 30-second version.** Any provable fact about a wallet's public
-STRK20 pool activity becomes a one-time, transferable capability that a
-completely different wallet can redeem, gas-sponsored, with nothing
-on-chain linking the two. The one part that isn't yet fully trustless is
-that the predicate check is a signed server attestation, not a client-side
-ZK proof — but its blast radius is bounded three separate ways: the same
-eligibility check re-runs independently in your own browser before you
-ever ask the server, a reward campaign can never pay out more than the
-contract's own live STRK balance, and every claim consumes a fresh
-nullifier that anyone can verify was spent exactly once. And you don't
-need any of that STRK20 history to try the primitive itself — one live
-campaign, "Capability Smoke Test," is satisfied by any wallet including a
-brand-new one; the other four check real, public pool activity, one of
-them paying a real STRK reward on redeem. See "Try the live demo" below.
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![Network: Starknet mainnet](https://img.shields.io/badge/network-Starknet%20mainnet-5b2cff.svg)](https://starkscan.co/contract/0x74614e0cd54af7e59987a5d74fdd028209feff01fc20eca2934fe80b94db402)
+[![Built for the STRK20 Private Sprint](https://img.shields.io/badge/hackathon-STRK20%20Private%20Sprint-black.svg)](https://github.com/starkience/strk20-hackathon)
 
-Prova Pass is not a selective-disclosure dashboard. It's a **capability
-layer**: a way to turn *any* provable fact about STRK20 pool activity — a
-holding period, a balance threshold, a deposit count, or anything else
-evaluable against public chain data — into a bearer token that acts
-on-chain, redeemable from a wallet that has never touched the underlying
-assets and holds zero gas. The contract never inspects what the predicate
-actually was, only that Prova attested to *something*. The output is
-always the same primitive: a one-time, transferable, unlinkable capability
-that can carry real value (a campaign can pay out a real ERC20 reward on
-redeem, not just record a claim). That primitive is what's new here, not
-any one campaign built on top of it.
+</div>
 
-## The primitive, in one paragraph
+---
 
-A wallet's **public** STRK20 pool activity — its deposit history, visible
-on-chain to anyone — is checked against a campaign's predicate. If it
-holds, Prova signs a capability bound to a fresh nullifier and hands it
-back — not to a wallet, to the *user*, as a bearer token. That token can
-sit in a browser, get pasted into a Discord DM, or be printed as a QR
-code; by default it carries no wallet binding until the moment someone
-redeems it, and the issuer can optionally lock it to one destination
-wallet at generation time instead — a real scope decision, not just a
-bearer-security disclaimer (see "Destination binding" below). Whoever
-redeems an unlocked pass chooses the destination wallet then and there,
-gas-sponsored, and — if the campaign carries a reward — receives a real
-ERC20 payout in the same transaction, independently verifiable from the
-claimer's own browser (see "Verify it yourself" below). The chain records
-only `(campaign_id, nullifier, recipient, signature)` — nothing that
-connects back to whoever originally qualified. This is the whole
-architecture: **honest public eligibility in, a portable, value-bearing
-capability out, consumed exactly once, from anywhere.** See "What is
-private / what is not" below for exactly which part of this is private
-today and which isn't — the honest answer is *less than the name
-suggests*, and we say so plainly rather than let the word "private" carry
-more than it should.
+Prova Pass is a capability layer. It takes a fact that can be proven about a wallet's **public** STRK20 pool activity, such as a holding period, a deposit total or a number of deposits. It then turns that fact into a bearer token. The token can be copied, sent in a DM or shown as a QR code, and it can be redeemed exactly once by a *different* wallet. That wallet can be brand new and empty.
 
-Built for the [STRK20 Private Sprint](https://github.com/starkience/strk20-hackathon)
-against the live mainnet privacy pool at
-`0x040337b1af3c663e86e333bab5a4b28da8d4652a15a69beee2b677776ffe812a`.
+The `ProvaPass` Cairo contract never inspects the predicate. It only checks that Prova's attester signed `(campaign_id, nullifier, recipient)`. It consumes the nullifier, and it can pay out an ERC20 reward in the same transaction.
 
-## Try the live demo
+Built for the [STRK20 Private Sprint](https://github.com/starkience/strk20-hackathon) against the live mainnet privacy pool at `0x040337b1af3c663e86e333bab5a4b28da8d4652a15a69beee2b677776ffe812a`.
 
-There are two paths, because one hard constraint shapes everything below:
-**Provah only reads a wallet's *existing* public STRK20 deposit history —
-it cannot deposit or shield on your behalf.** The mainnet prover endpoint
-the pool's own deposit/shield actions require is unpublished (see "Attempted:
-pool-touching transactions" in [`STATUS.md`](STATUS.md)), so Provah
-deliberately does not attempt to drive that flow from inside the app. If
-your wallet has no prior pool activity, Path 1 still lets you exercise the
-entire primitive today.
+> [!IMPORTANT]
+> **The predicate check is a signed server attestation, not a zero-knowledge proof.** Whoever holds the attester key (today, only Prova) could sign a pass for a predicate that does not hold. The rest is enforced on-chain or can be checked by anyone: replay protection, binding to a campaign and recipient, and payout limits. See [Trust model](#trust-model) for exactly what is and isn't private.
 
-**Path 1 — try it in 2 minutes, no deposit needed.** [provah.vercel.app](https://provah.vercel.app/)
-has a fifth campaign, **"Capability Smoke Test,"** built on the same
-`deposit_count` predicate type as "Active Depositor" but with a minimum of
-zero — satisfied by *any* address, including a brand-new, empty one. It
-proves the whole capability primitive with nothing at stake:
-1. Select **"Capability Smoke Test"** in the campaign picker (it's the
-   default for first-time visitors).
-2. **Connect wallet A** — literally any wallet — and click **Generate
-   pass**.
-3. **Connect wallet B** — any other wallet, even empty — and click
-   **Claim**. Gas-sponsored, so wallet B never needs STRK.
-4. Click **Verify on-chain** — reads `is_nullifier_consumed` straight from
-   public RPC, independent of Provah's backend.
+## Contents
 
-**Path 2 — the real predicate, optional reward.** Five campaigns are live
-in total: three real predicate types checked against genuine pool activity
-(see "Multiple predicate types" below), the open-access smoke test above,
-and "STRK Welcome Reward," which pays out a real 0.05 STRK on redeem
-instead of just recording a claim.
-1. Shield some STRK once, in Ready or Braavos, into the live STRK20 pool —
-   this is the one step Provah's own UI cannot do for you.
-2. Come back, select a real campaign, and **connect wallet A** — the app
-   immediately runs an independent, client-side eligibility check against
-   public RPC, so you see it agree with the server before clicking
-   anything. Then click **Generate pass**.
-3. Copy the pass token, or disconnect wallet A. **Connect wallet B** — any
-   other wallet, funded or not — and click **Claim**.
-4. Try the **"Redeem a pass someone gave you"** section instead: paste a
-   pass token with no prior connection to the session that generated it,
-   connect any wallet, and claim. Same bearer-token property, made literal.
-5. The resulting claim transaction is real, on mainnet, and names nothing
-   about wallet A. Click **Verify on-chain** — for the reward campaign this
-   also shows the exact STRK balance delta observed in your browser before
-   and after the claim.
-6. Before generating a pass, try checking **"Lock this pass to one
-   destination wallet"** and pasting an address — that pass will then only
-   ever be claimable by that one wallet; any other `recipient` is refused
-   server-side before Provah even signs.
+- [Try it](#try-it)
+- [How it works](#how-it-works)
+- [Live campaigns](#live-campaigns)
+- [Trust model](#trust-model)
+- [Verify a claim yourself](#verify-a-claim-yourself)
+- [Architecture](#architecture)
+- [Running locally](#running-locally)
+- [Mainnet admin actions](#mainnet-admin-actions)
+- [On-chain record](#on-chain-record)
+- [License and credits](#license-and-credits)
 
-A wallet with no eligibility for a real campaign sees an instructional
-empty state in the app itself, with a one-click link back to the smoke
-test — "not eligible" is never a dead end.
+## Try it
 
-## Multiple predicate types, one contract, one attester
+Prova only **reads** a wallet's existing public STRK20 deposit history. It cannot deposit into the pool or shield funds for you: the mainnet prover endpoint the pool requires is unpublished (see [The prover gap](#the-prover-gap)).
 
-`ProvaPass` doesn't hardcode a predicate — it only ever validates that
-Prova's attester signed `(campaign_id, nullifier, recipient)`. That means
-new predicate types ship as backend logic, not contract redeploys, and all
-three below are already live against the same deployed contract:
+**Path 1: no deposit needed (about 2 minutes)**
 
-| Predicate type | What it checks | Live campaign |
+1. Open [provah.vercel.app](https://provah.vercel.app/) and pick **Capability Smoke Test**. It is the default for first-time visitors and is satisfied by any address.
+2. Connect **wallet A** and click **Generate pass**.
+3. Connect **wallet B** (any other wallet, even one with no funds) and click **Claim**. Prova's operating account pays the gas.
+4. Click **Verify on-chain**. This reads `is_nullifier_consumed` directly from public RPC, without going through Prova's backend.
+
+**Path 2: a real predicate, optionally with a reward**
+
+1. Shield some STRK into the STRK20 pool once, using a privacy-enabled wallet (Ready or Braavos).
+2. Pick a real campaign and connect wallet A. The browser runs its own eligibility check against public RPC before anything is sent to the server.
+3. Generate the pass, then claim it from wallet B. You can also paste a token into **Redeem a pass someone gave you**.
+4. Optionally tick **Lock this pass to one destination wallet** before generating. `/api/claim` then refuses any other recipient with `403` before signing.
+
+If a wallet doesn't qualify for a real campaign, the app shows instructions and a link back to the smoke test.
+
+## How it works
+
+1. **Campaign.** An operator creates a campaign on `ProvaPass` with `create_campaign`. The predicate type and claim kind live in the backend, so adding a campaign never needs a contract redeploy.
+2. **Pass.** `/api/pass` reads the pool's public `Deposit` events for the caller's address and evaluates the predicate. If the predicate holds, it stores a pass bound to a fresh nullifier, `pedersen(campaign_id, prover_address, salt)`.
+3. **Hand-off.** The pass token `(campaignId, nullifier)` is a bearer token. It is not tied to any wallet unless it was locked to one destination.
+4. **Claim.** `/api/claim` signs `(campaign_id, nullifier, recipient)` with the attester key and relays `claim_with_prova_pass` from the operating account, so the claiming wallet needs no STRK.
+5. **On-chain.** The contract checks the ECDSA signature, checks that the nullifier is unused and consumes it, and pays `reward_amount` of `reward_token` if the amount is above zero.
+
+The chain only ever records `(campaign_id, nullifier, recipient, signature)`, so nothing on-chain links the recipient to the qualifying address.
+
+### Predicate types
+
+All three read the same public data, the pool's `Deposit` events, and aggregate it differently. They are implemented in [`src/lib/predicate.ts`](src/lib/predicate.ts).
+
+| Predicate | Checks |
+|---|---|
+| `held_since` | Deposited ≥ X of asset Y in total, at least N days ago |
+| `balance_threshold` | Deposited ≥ X of asset Y in total, at any time |
+| `deposit_count` | Made ≥ N separate deposits of asset Y |
+
+> [!NOTE]
+> "In total" means **lifetime deposits**, not current balance. The pool's `Withdrawal` event encrypts the withdrawing user (`enc_user_addr`), so withdrawals can't be linked back to a depositor from public data.
+
+### Claim kinds
+
+- **`capability`**: the nullifier is consumed and nothing is transferred. Use it for allowlists or one-time actions.
+- **`reward_token`**: the contract also transfers `reward_amount` of `reward_token` to the recipient. There is one entrypoint for both kinds; `reward_amount = 0` makes a claim capability-only.
+
+### Issuance rules
+
+- **Reward campaigns:** one pass per wallet. `/api/pass` stores a deterministic `address_commitment = pedersen(address, campaignId)` and returns `409` on a repeat. The code comments describe a unique index on `(campaign_id, address_commitment)` as a backstop, but the schema isn't in the repo.
+- **Non-reward campaigns:** a wallet can generate any number of passes, each with its own nullifier.
+- **All campaigns:** a nullifier can only ever be claimed once.
+
+## Live campaigns
+
+Five campaigns run on the single deployed contract. This list matches `GET https://provah.vercel.app/api/campaigns` and `strk20.json`.
+
+| Campaign | Predicate | Claim kind |
 |---|---|---|
-| `held_since` | Deposited ≥ X of asset Y, cumulatively, at least N days ago | "STRK Loyalty Drop" |
-| `balance_threshold` | Deposited ≥ X of asset Y, cumulatively, ever | "STRK Holder Badge" |
-| `deposit_count` | Made ≥ N separate deposits of asset Y into the pool | "Active Depositor" |
+| STRK Loyalty Drop | `held_since` (≥ 1 STRK in total, ≥ 7 days ago) | capability |
+| STRK Holder Badge | `balance_threshold` (≥ 1 STRK in total) | capability |
+| Active Depositor | `deposit_count` (≥ 1 deposit) | capability |
+| STRK Welcome Reward | `balance_threshold` (≥ 1 STRK in total) | reward_token: **0.05 STRK** on redeem |
+| Capability Smoke Test | `deposit_count`, minimum 0 (any address) | capability |
 
-All three read the same honest, public data source — the pool's `Deposit`
-events — just aggregated differently. **Be precise about what "cumulative"
-means here:** none of these predicates subtract withdrawals, so
-`balance_threshold` checks lifetime deposits, not current pool balance —
-and that's not a shortcut we could close by reading more events. The
-pool's own `Withdrawal` event keeps the withdrawing user's identity
-encrypted (`enc_user_addr`); only the destination address (`to_addr`) is a
-public, indexed key. A withdrawal genuinely cannot be linked back to the
-depositor it came from without breaking the pool's own privacy design, so
-"current net balance per address" isn't honestly computable from public
-data at all — "cumulative deposited" is the accurate ceiling, not a
-missing feature. Adding a fourth predicate type is a function in
-`src/lib/predicate.ts`, not a new deployment.
-
-A fifth live campaign, **"Capability Smoke Test,"** reuses `deposit_count`
-with a minimum of zero — deliberately satisfied by every address, including
-one that has never touched the pool. It exists purely so the capability
-primitive itself is testable by anyone with a Starknet wallet, without
-first needing real STRK20 pool activity; it pays no reward and proves
-nothing private about the connecting wallet. See "Try the live demo" above.
-
-The claim side is equally generic: a campaign's `claim_kind` is
-`capability` (nullifier consumed, nothing transferred — an allowlist entry
-or a provable one-time action), or `reward_token` (the contract also pays
-out `reward_amount` of `reward_token` to the recipient). Same contract
-entrypoint either way — `reward_amount = 0` is what makes a claim
-capability-only. **This isn't theoretical:** the fourth live campaign,
-"STRK Welcome Reward" (`balance_threshold`, `reward_token`), funded the
-deployed `ProvaPass` contract with real STRK and executed a real claim —
-the recipient's on-chain STRK balance went from `0` to exactly
-`50000000000000000` wei (0.05 STRK), verified before and after via
-`balanceOf`, in the same transaction that consumed the nullifier. See
-`strk20.json` for the funding tx, campaign-creation tx, and claim tx.
-
-## Destination binding
-
-A pass is a pure bearer token by default — anyone holding it chooses the
-destination wallet at claim time. That's the maximally-flexible form, but
-it isn't the only form the capability supports. At generation time, the
-holder of wallet A can optionally lock the pass to one destination address
-(`boundRecipient`, an additive, nullable column on `prova_passes`):
-`/api/claim` checks it *before* signing — `BigInt(pass.bound_recipient) !==
-BigInt(recipient)` returns `403` — so a locked pass genuinely cannot be
-redeemed anywhere else, not merely "shouldn't be." This turns "bearer
-token, by design, full stop" into an actual scope decision the issuer
-makes: pure bearer for hand-off scenarios (gift a capability to someone
-unknown at issuance time), or destination-bound for scenarios where the
-receiving wallet is already known and the extra guarantee is worth losing
-transferability. Nothing about the unlocked path changes — this is
-strictly additive.
-
-## Eligibility, checked in your browser before Prova ever sees it
-
-The predicate check (see "The attester today" below for exactly why it's
-still a server attestation and not a ZK proof) is the one real trust
-boundary in this system. Everything that can be pushed out of that
-boundary without the missing prover has been:
-
-- **The client independently re-derives eligibility, from public data, on
-  its own.** The moment wallet A connects, the app runs the *exact same
-  computation* `src/lib/predicate.ts` performs server-side —
-  `clientEvaluatePredicate` in `src/app/ProvaApp.tsx` reads the pool's
-  public `Deposit` events straight from the browser's own RPC connection
-  and evaluates the same predicate arithmetic — before `/api/pass` is ever
-  called. The result ("✅ You qualify — 1.2 STRK found, need 1.0") is not a
-  preview of what Prova will say; it's an independent confirmation a judge
-  or a user can audit by reading the same open-source function and running
-  it themselves, against data neither Prova nor the user controls.
-- **Prova's server still receives the address** — that part can't be
-  removed without the blocked prover, since *someone* has to check real
-  chain history and only the caller can supply which address to check. But
-  it was already the practical minimum: the server takes one address as
-  input, computes over public data it fetches itself, and returns a
-  signed capability — never a wallet history dump, a viewing key, or a
-  private key. The client-side self-check above proves this is exactly
-  what happens: if Prova's server were reading anything else, its verdict
-  and the browser's independent verdict would disagree.
-- **One pass per wallet per campaign — but only where that limit actually
-  protects something.** Nullifiers are derivable with a caller-suppliable
-  `salt`, which means a single qualifying wallet could in principle request
-  unlimited passes for one campaign by varying the salt. For a **reward**
-  campaign (`reward_amount > 0`), `/api/pass` computes a deterministic,
-  salt-free `address_commitment = pedersen(address, campaignId)` and
-  rejects a second pass request for a commitment already on file (`409`) —
-  enforced by a unique index on `(campaign_id, address_commitment)` in
-  Postgres. One real wallet, one pass, per reward campaign — the pool
-  can't be drained by minting N passes from one eligible address. For a
-  **non-reward** campaign (the Capability Smoke Test and any other purely
-  capability-based campaign), there is nothing to drain, so this limit
-  doesn't apply: the same wallet can Generate as many times as it wants,
-  each with its own nullifier — useful for demoing or re-testing without
-  hunting for a fresh empty wallet every time. Nullifier uniqueness itself
-  (no pass, reward or not, can ever be claimed twice) is unconditional.
-
-## Verify it yourself
-
-Every claim is independently checkable without trusting Provah's UI at
-all, straight from the browser's own public RPC connection
-(`https://rpc.starknet.lava.build`), against the live contracts:
-
-- **Nullifier consumption** — after a claim, click **Verify on-chain** and
-  the app calls `is_nullifier_consumed` directly on `ProvaPass` — the same
-  contract read anyone could make from a block explorer or their own
-  script. It does not go through Provah's backend or database at all.
-- **Reward delivery** — for reward campaigns, the app reads the claiming
-  wallet's STRK `balanceOf` immediately before and after the claim
-  transaction, both calls made client-side against the public RPC, and
-  shows the exact delta. "Redeem pays out a real reward" stops being an
-  assertion in a status message and becomes a number the browser itself
-  fetched from mainnet.
-- **The blast radius of a dishonest attestation is capped, and the cap is
-  live.** `ProvaPass` can never pay out more than it currently holds — the
-  campaign card for any reward campaign reads the contract's real STRK
-  balance client-side and shows it: "reward pool currently holds X STRK…
-  that is the hard cap on what any attestation, honest or not, could ever
-  pay out." If the attester's key were ever compromised, the maximum
-  possible damage is a public, checkable number, not an unbounded claim.
-- **Campaign activity** — every campaign card shows how many passes have
-  been claimed for it so far, read live from `ProvaPass`'s own
-  `PassClaimed` event log (`campaign_id` is an indexed key on that event),
-  the same way anyone could query it themselves. It fails soft (just
-  hides the number) if public RPC is slow, rather than blocking the page.
-- **From the command line, with zero setup:** `scripts/verify-claim.mjs`
-  performs the identical `is_nullifier_consumed` check as the "Verify
-  on-chain" button, plus an optional STRK `balanceOf` delta, using only
-  public RPC — no Provah backend, no database, no secrets, nothing this
-  repo's own tooling has that you don't:
-  ```sh
-  node scripts/verify-claim.mjs <nullifier>
-  # or, to also confirm a reward payout:
-  node scripts/verify-claim.mjs <nullifier> <recipientAddress> <beforeBalanceWei>
-  ```
-  The live app links this exact command (with the real nullifier already
-  filled in) right next to its own "Verify on-chain" button, so the CLI
-  and the UI are always checking the same claim.
-
-All of this reduces Provah's trust surface to exactly what "What is
-private / what is not" documents, and no further: the predicate evaluation
-is a signed attestation you have to trust once (and can now watch the
-client independently agree with); everything downstream of that
-signature — that a wallet can only ever get one pass per campaign, that a
-claim consumed a specific nullifier, that a reward moved a specific amount
-to a specific wallet and could never have exceeded the funded balance — is
-independently auditable and never has to be taken on faith.
-
-## The flow
-
-1. A campaign owner deploys a **predicate** of one of the types above.
-2. A user with STRK20 pool deposit history requests a **Prova Pass** for
-   that campaign. Prova checks the predicate against that history — public
-   on-chain data, not private note state — and, if satisfied, signs a
-   one-time capability bound to a fresh **nullifier**. This is the bearer
-   token, not yet addressed to any wallet.
-3. The user hands that token to *any* wallet — a brand-new, funding-free
-   one, or literally anyone else's.
-4. That wallet calls `claim_with_prova_pass` on the `ProvaPass` contract.
-   The contract verifies Prova's signature, **consumes the nullifier**, and
-   — if the campaign carries a reward — pays it out in the same
-   transaction.
-5. The token cannot be reused. Nothing on-chain, and nothing Prova stores,
-   links the claiming wallet back to the wallet whose deposit history
-   satisfied the predicate.
-
-## What is private / what is not
-
-This is the section that matters most — read it before treating any part of
-the demo as a stronger privacy guarantee than it actually provides today.
+## Trust model
 
 | | Status |
 |---|---|
-| **Shielded balances and note-to-note transfers inside the STRK20 pool** | Private by the pool's own design — Prova doesn't touch this. |
-| **That a deposit into the pool happened, its amount, and the depositor's address** | **Public.** STRK20 deposits are screened and emit a public `Deposit` event (confirmed directly from the pool's Cairo source and the hackathon's Day-0 guide). Prova's predicate evaluators read this real, public event log — they are not reading anything private. |
-| **The claim transaction and the recipient wallet** | Public, and by construction **not linkable** to the depositor address above: the `ProvaPass` contract only ever sees `(campaign_id, nullifier, recipient, signature)`. The nullifier is a Pedersen hash of `(campaign_id, prover_address, salt)` computed off-chain — nothing about the prover address is recoverable from it on-chain. |
-| **The predicate check itself** | **This is the honest trust boundary, and it's temporary.** See "The attester today, and what replaces it" below. |
-| **Who Prova can link, operationally** | Prova's server sees the prover's address for the duration of the `/api/pass` request (to read its public deposits) but stores only one-way Pedersen commitments of it, never the raw address — see `src/lib/attestation.ts`. **Be precise about a real trade-off this pass introduced, and where it now does and doesn't apply:** one of those two stored commitments (`issuer_commitment`) includes a random salt and is unguessable without it; the other (`address_commitment`, computed only for **reward** campaigns — `reward_amount > 0` — to enforce one pass per wallet there) is deterministic — `pedersen(address, campaignId)`, no salt — specifically so repeat requests for the same wallet collide. That means anyone with **database access** (in practice, only Prova operating honestly, or Prova compromised) could test a candidate address against a *reward* campaign and learn whether that address already holds a pass for it. For a non-reward campaign (the Capability Smoke Test, or any other purely capability-based campaign), `address_commitment` is never computed at all — `null` every time, so this narrower guarantee doesn't apply there, and nothing is linkable through it even to a compromised operator. It reveals nothing to anyone without database access, and nothing about which wallet claims a pass, but on a reward campaign it is a narrower privacy guarantee against an already-trusted-or-compromised operator than the previous salted-only design — a deliberate trade against a concrete abuse (draining a reward pool from one wallet), disclosed rather than left implicit. |
+| Shielded balances and note-to-note transfers inside the pool | Private by the pool's own design. Prova doesn't touch them. |
+| That a deposit happened, its amount, and the depositor's address | **Public.** The pool emits a public `Deposit` event, and Prova's predicates read only that. |
+| The claim transaction and recipient | Public. They aren't linkable to the depositor on-chain, because the contract only sees `(campaign_id, nullifier, recipient, signature)`. |
+| The predicate check | **A trusted server attestation.** This is the one real trust boundary (see below). |
+| What Prova's server sees | The prover's address for the length of the `/api/pass` request. It stores one-way Pedersen commitments only, never the raw address ([`src/lib/attestation.ts`](src/lib/attestation.ts)). |
 
-In short: **today**, unlinkability is real and enforced on-chain; the
-predicate check is a signed server attestation instead of a client-side ZK
-proof, because the infrastructure needed to make that check itself
-zero-knowledge isn't publicly reachable yet. That is the single gap between
-this v1 and the fully trustless version the architecture is designed for.
+> [!WARNING]
+> For **reward** campaigns, `address_commitment` has no salt, so the same wallet always maps to the same value. Anyone with **database access** could therefore check whether a candidate address already holds a pass for that campaign. This is a deliberate choice so that one wallet can't drain the reward pool. Non-reward campaigns never compute it.
 
-### The attester today, and what replaces it
+**What limits a dishonest or compromised attester**
 
-Evaluating any of the three predicates above as a client-side ZK proof over
-private note state requires submitting through STRK20's mainnet
-transaction-prover (`starknet_proveTransaction`). We checked for a public
-endpoint across every source we could find — the hackathon repo, the
-starter kit, the official `starknet-privacy` reference demo (which ships
-the URL as a literal unfilled `TODO_MAINNET_PROVER_URL`) — and asked
-directly via a hackathon-repo issue. **This isn't a Provah-specific gap:**
-the hackathon repo has three separate open issues asking the identical
-question from different teams — [#204](https://github.com/starkience/strk20-hackathon/issues/204),
-[#147](https://github.com/starkience/strk20-hackathon/issues/147), and
-[#121](https://github.com/starkience/strk20-hackathon/issues/121) — and as
-of this write-up, none has a maintainer response. Every team building a
-real per-claim proof against this pool on mainnet is blocked on the same
-unpublished infrastructure; this isn't a corner Provah cut.
+- The browser re-checks eligibility independently. `clientEvaluatePredicate` in [`src/app/ProvaApp.tsx`](src/app/ProvaApp.tsx) runs the same predicate maths against public RPC before `/api/pass` is called.
+- A reward campaign can never pay out more than `ProvaPass` actually holds. Each reward campaign card reads that balance live.
+- Every claim consumes a nullifier exactly once, and anyone can check this.
 
-We went one step further than checking docs: we hand-built and submitted a
-real fee-estimation call for `EmitViewingKeySet` — the one pool action the
-hackathon's own guide says needs neither a proof nor screening — against the
-live pool contract's real ABI. It reached `apply_actions` correctly (no
-deserialization error) and reverted with the pool's own `EMPTY_PROOF_FACTS`
-error, three call-frames deep in its execution. That confirms, on-chain,
-that *every* `apply_actions` call — not just deposits — requires a bundle of
-STARK proof artifacts that only the undocumented prover service can
-produce. See `STATUS.md` for the full transcript of that attempt.
+### The prover gap
 
-There is a second route besides holding the prover key yourself: a
-**privacy-enabled wallet** (Ready or Braavos) can reach the prover on the
-user's behalf, through three wallet-injected RPC methods —
-`wallet_supportedWalletApi`, `wallet_strk20Balances`,
-`wallet_strk20InvokeTransaction` — confirmed against a real, MIT-licensed
-reference implementation and a real cited Ready-wallet mainnet transaction
-that shielded STRK through it. This build environment's own tooling
-cannot drive that route headlessly (the real wallet binaries are
-Chrome-Web-Store-only and unreachable from here, and the one
-buildable-from-source alternative, Argent's `argent-x`, doesn't yet
-contain the feature — see `STATUS.md`'s "Final attempt: the Wallet API
-route" for the full trail) — but the route itself doesn't need this
-environment, only a human with the right wallet, which is exactly how
-it's meant to work. The team completed four such transactions directly:
-see "Real STRK20 pool transactions" below.
+Replacing the attestation with a client-side ZK proof needs STRK20's mainnet transaction prover (`starknet_proveTransaction`), and no public endpoint for it has been found. The hackathon repo has open issues from several teams asking for it: [#204](https://github.com/starkience/strk20-hackathon/issues/204), [#147](https://github.com/starkience/strk20-hackathon/issues/147) and [#121](https://github.com/starkience/strk20-hackathon/issues/121).
 
-Until that endpoint (hosted or self-run) exists, Prova's backend evaluates
-the predicate directly against the pool's *public* deposit history and
-signs the resulting capability — a server attestation, not a
-zero-knowledge proof. **Be precise about what that means for trust:**
-`ProvaPass.cairo` only ever checks that *some* signature from the
-attester's key exists over `(campaign_id, nullifier, recipient)` — it has
-no way to verify the predicate was actually satisfied. Whoever holds the
-attester's private key (today, only Prova) could sign a pass for a
-predicate that doesn't hold. That is the honest trust boundary, not
-something this v1 avoids. What *is* enforced on-chain, independent of
-Prova's honesty, once a signature exists: it cannot be replayed (the
-nullifier registry consumes it exactly once), it cannot be redirected to a
-different campaign or recipient than it was signed for (both are hashed
-into the signed message), and — for reward campaigns — the payout amount
-and token are fixed at campaign creation, not chosen by whoever claims.
-Swapping the attester's signature for a real per-claim ZK proof removes
-Prova from that trust position entirely; see below for exactly what
-changes.
+A hand-built `apply_actions` fee estimate for `EmitViewingKeySet` reverted with the pool's own `EMPTY_PROOF_FACTS` error. That confirms every pool state change needs proof artifacts. The full transcript is in [`STATUS.md`](STATUS.md).
 
-**Swapping the attester for a real proof is a backend-only change:**
+If a prover becomes reachable, the swap is backend-only:
 
-- `ProvaPass.cairo` does not change at all — `claim_with_prova_pass`
-  already only checks `check_ecdsa_signature(message_hash, attester,
-  signature_r, signature_s)` over `(campaign_id, nullifier, recipient)`. A
-  ZK verifier could replace that check, or the attester's key could be
-  replaced by a key controlled by the prover service itself, with zero
-  changes to the nullifier registry or claim flow.
-- `src/lib/predicate.ts`'s `evaluatePredicate` functions are the only code
-  that would be replaced — swap the public-event read for a
-  `starknet_proveTransaction` call against the user's private note state,
-  and have that call itself produce the attestation (or a verifiable proof
-  the contract checks directly instead of trusting a signature).
-- Nothing about the bearer-token, cross-wallet-claim, or nullifier
-  mechanics changes. Those are already trustless.
+- `ProvaPass.cairo` stays as it is.
+- The `evaluatePredicate` functions in `src/lib/predicate.ts` are replaced.
+- The bearer-token and nullifier mechanics stay the same.
+
+## Verify a claim yourself
+
+From the command line, using only public RPC (no Prova backend, database or secrets):
+
+```sh
+node scripts/verify-claim.mjs <nullifier>
+# also confirm a reward payout:
+node scripts/verify-claim.mjs <nullifier> <recipientAddress> <beforeBalanceWei>
+```
+
+Run `npm install` first, because the script imports `starknet`. The live app shows this exact command, with the real nullifier filled in, next to its **Verify on-chain** button.
+
+In the browser, the app also:
+
+- reads the recipient's STRK `balanceOf` before and after a reward claim and shows the difference
+- shows how many passes have been claimed per campaign, from `ProvaPass`'s `PassClaimed` events
 
 ## Architecture
 
 ```
-[Wallet A, private holder]
-        │  address + salt
-        ▼
-[Prova backend: /api/pass]
-        │  reads public Deposit events, evaluates predicate
-        │  (held_since | balance_threshold | deposit_count — pluggable),
-        │  derives nullifier, stores pass in Neon
-        ▼
-[Bearer token: (campaignId, nullifier)]
-        │  exportable — copy/paste, QR, DM — redeemable by anyone, from anywhere
-        ▼
-[Wallet B, any wallet — connects and submits recipient]
-        │  campaignId, nullifier, recipient
-        ▼
-[Prova backend: /api/claim]
-        │  signs attestation over (campaignId, nullifier, recipient)
-        │  relays the transaction — gasless for wallet B
-        ▼
-[ProvaPass.cairo, mainnet]
-        - verify ECDSA over attester
-        - check nullifier unconsumed, then consume it
-        - pay out reward_amount of reward_token, if any
+[Wallet A] --address+salt--> /api/pass --reads public Deposit events, evaluates predicate,
+                                          derives nullifier, stores pass (Postgres)
+                                  |
+                                  v
+                     bearer token (campaignId, nullifier)  -- copy / QR / DM
+                                  |
+[Wallet B] --recipient--------> /api/claim --signs (campaignId, nullifier, recipient),
+                                             relays tx from the operating account (gasless for B)
+                                  |
+                                  v
+                     ProvaPass.cairo (Starknet mainnet)
+                       verify ECDSA -> consume nullifier -> pay reward if reward_amount > 0
 ```
 
-- **Contracts** (`contracts/prova_pass/`) — a single Cairo contract
-  (`ProvaPass`) with `create_campaign`, `claim_with_prova_pass`, and a
-  nullifier registry. It never validates what a campaign's predicate
-  *was* — only the attester's signature over the claim triple — which is
-  exactly what makes new predicate types and new campaigns free of
-  redeploys. Compiled with Scarb 2.9.2; artifacts vendored into
-  `src/contracts/` for the app to declare/deploy.
-- **Privacy SDK** (`vendor/starknet-privacy-sdk`, `vendor/starknet-privacy-client`)
-  — StarkWare's real `@starkware-libs/starknet-privacy-sdk` and its
-  client helpers, built from source (no public npm registry publish was
-  found) and vendored so the app doesn't depend on GitHub Packages auth.
-  Used today for its Pedersen/viewing-key/ECDSA primitives; wiring in
-  `createPrivateTransfers` for actual shield/transfer calls is blocked on
-  the missing prover endpoint (see above).
-- **App** (`src/app`, Next.js App Router) — campaign browser with
-  predicate-type badges, pass generation, a bearer-token export/redeem
-  flow, and the Wallet A → Pass → Wallet B visual, all in
-  `src/app/ProvaApp.tsx`.
-- **API** (`src/app/api`) — `/api/campaigns` (list), `/api/pass` (issue,
-  predicate-type aware), `/api/claim` (redeem, gas-sponsored by Prova's
-  operating account so a brand-new wallet needs zero STRK to claim),
-  `/api/admin/*` (one-shot deploy/campaign-creation, token-gated).
-- **DB** (Neon Postgres) — `campaigns` (now carrying `predicate_type` and
-  `claim_kind`), `prova_passes`, `claims`, `mainnet_activity_log`. Public
-  metadata only. No private note data ever touches this database.
-- **Mainnet execution** — this repo's own dev sandbox cannot reach
-  Starknet RPC (see `STATUS.md`), so real transactions run either from the
-  deployed Vercel app or via `.github/workflows/mainnet-admin.yml`
-  (`scripts/mainnet-admin.mjs`), a `workflow_dispatch` action that runs on
-  a GitHub-hosted runner with full internet access.
+| Path | What's there |
+|---|---|
+| [`contracts/prova_pass/`](contracts/prova_pass) | The `ProvaPass` Cairo contract (Scarb, `starknet = "2.9.2"`). Compiled Sierra and CASM files are vendored in [`src/contracts/`](src/contracts). |
+| [`src/app/`](src/app) | Next.js 16 App Router UI. The main flow is in `ProvaApp.tsx`; the icon and OG image are generated in code. |
+| [`src/app/api/`](src/app/api) | `campaigns`, `pass` and `claim`, plus `admin/deploy` and `admin/create-campaign`, which are gated by `PROVA_ADMIN_TOKEN`. |
+| [`src/lib/`](src/lib) | Predicates, attestation, pass tokens, claim and pass decisions, the Starknet client and Postgres (`pg`). |
+| [`vendor/`](vendor) | StarkWare's `@starkware-libs/starknet-privacy-sdk` and `starknet-privacy-client`, built from source and vendored. They are currently used for Pedersen, viewing-key and ECDSA primitives. |
+| [`scripts/`](scripts) | `mainnet-admin.mjs` (operator CLI), `verify-claim.mjs`, and the `tsx` test scripts. |
 
-## Running it yourself
+## Running locally
+
+**Requirements:** Node.js 22, which is what CI uses. You also need a Postgres database, a funded Starknet mainnet account to act as the operator, and an attester keypair.
 
 ```bash
 npm install
-cp .env.example .env.local   # fill in STARKNET_*, DATABASE_URL, PROVA_*
-npm run dev
+cp .env.example .env.local
+npm run dev        # http://localhost:3000
 ```
 
-To compile the contract:
+| Variable | Purpose |
+|---|---|
+| `STARKNET_RPC_URL` | Starknet mainnet RPC (the example uses public Lava RPC) |
+| `STARKNET_CHAIN_ID` | `0x534e5f4d41494e` (`SN_MAIN`) |
+| `STRK20_POOL_ADDRESS` | The STRK20 privacy pool contract |
+| `STARKNET_ACCOUNT_ADDRESS`, `STARKNET_PRIVATE_KEY` | The operating account, which deploys contracts, creates campaigns and relays every claim. If either is missing, `/api/claim` returns `503 operator_not_configured`. |
+| `PROVA_PASS_CONTRACT_ADDRESS`, `PROVA_PASS_CLASS_HASH` | Filled in after deploy |
+| `PROVA_ATTESTER_PRIVATE_KEY`, `PROVA_ATTESTER_PUBLIC_KEY` | The attester keypair. The public key is baked into `ProvaPass` at deploy time. |
+| `DATABASE_URL` | Postgres for campaigns, passes, claims and the activity log (public metadata only) |
+| `PROVA_ADMIN_TOKEN` | Shared token for the `/api/admin/*` routes |
+
+> [!NOTE]
+> The repo doesn't include a SQL schema or migration for the Postgres tables (`campaigns`, `prova_passes`, `claims`, `mainnet_activity_log`). A fresh database has to be set up to match the queries in `src/lib/db.ts` and the API routes.
+
+**Other commands**
 
 ```bash
-scarb build   # from contracts/prova_pass/
+npm test           # tsx test scripts: typed-data, ownership-fallback, predicate maths,
+                   # pass token, pass and claim decisions, claim copy
+npm run build      # next build
+scarb build        # run from contracts/prova_pass/
 ```
 
-To deploy and seed a campaign for real (needs the env vars above as
-GitHub Actions secrets on this repo, or as Vercel project env vars):
+## Mainnet admin actions
+
+Real mainnet transactions run either from the deployed app or from the manual **Mainnet admin action** workflow ([`.github/workflows/mainnet-admin.yml`](.github/workflows/mainnet-admin.yml)). That workflow calls `scripts/mainnet-admin.mjs` on a GitHub-hosted runner, using repo secrets.
+
+Its actions are:
+
+- `deploy-account`, `deploy`
+- `create-campaign`, `claim`, `fund-contract`
+- `balance`, `check-owner`, `check-class`, `get-campaign`, `tx-status`
+- `pool-abi`, `pool-register`
+- `generate-attester-key`, `get-attester`, `set-attester`
+
+They can also be run locally, with the environment variables exported:
 
 ```bash
-# via GitHub Actions (Actions tab → Mainnet admin action → Run workflow)
-#   action: deploy
-#   action: create-campaign, arg1..arg8: name asset minAmount minDays rewardToken rewardAmount expiryDays predicateType
-
-# or locally, with the env vars exported:
 node scripts/mainnet-admin.mjs deploy
-node scripts/mainnet-admin.mjs create-campaign "STRK Loyalty Drop" 0x04718f5a0fc34cc1af16a1cdee98ffb20c31f5cd61d6ab07201858f4287c938d 1000000000000000000 7 "" "" "" held_since
+node scripts/mainnet-admin.mjs create-campaign "STRK Loyalty Drop" \
+  0x04718f5a0fc34cc1af16a1cdee98ffb20c31f5cd61d6ab07201858f4287c938d \
+  1000000000000000000 7 "" "" "" held_since
 ```
 
-## Mainnet transactions
+> [!WARNING]
+> These commands send real transactions on Starknet **mainnet** from the operating account, and they spend real STRK.
 
-`ProvaPass` is live on Starknet mainnet at
-[`0x74614e0cd54af7e59987a5d74fdd028209feff01fc20eca2934fe80b94db402`](https://starkscan.co/contract/0x74614e0cd54af7e59987a5d74fdd028209feff01fc20eca2934fe80b94db402)
-(class hash `0x7adfeaf0d075cda33b3128fd9cc255e34e7b778e907cbb64216d76bd7cf89e6`),
-with **4 live campaigns** — the original 3 predicate types plus a live
-reward campaign that pays out real STRK on redeem. Ten real, confirmed
-`ProvaPass` mainnet transactions, machine-readable in
-[`strk20.json`](strk20.json) — plus, separately, one real, direct
-transaction against the STRK20 pool contract itself (see below):
+## On-chain record
 
-| # | Type | Hash |
+`ProvaPass` is at [`0x74614e0cd54af7e59987a5d74fdd028209feff01fc20eca2934fe80b94db402`](https://starkscan.co/contract/0x74614e0cd54af7e59987a5d74fdd028209feff01fc20eca2934fe80b94db402), with class hash `0x7adfeaf0d075cda33b3128fd9cc255e34e7b778e907cbb64216d76bd7cf89e6`.
+
+[`strk20.json`](strk20.json) records **15 mainnet transactions**: 11 involving `ProvaPass` and 4 made directly against the STRK20 pool.
+
+<details>
+<summary><b>ProvaPass transactions (11)</b></summary>
+
+| # | Type | Tx |
 |---|---|---|
-| 1 | `deploy_account` — operating account | [`0x266ff3…c010`](https://starkscan.co/tx/0x266ff30feda87e59c13eeccf122af1d82aaf92088d95cf7dcbff91f44c3c010) |
-| 2 | `declare` — ProvaPass class | [`0x1d57d6…1153`](https://starkscan.co/tx/0x1d57d647ff240ff4c02d9fb255bbaf80bc5238f8091483f33505c0ca3011153) |
-| 3 | `deploy` — ProvaPass instance | [`0x79375d…c70a`](https://starkscan.co/tx/0x79375d773a91d5726a9bf896e114bc7549003f05c7decd685a0bce5b47dc70a) |
-| 4 | `create_campaign` — "STRK Loyalty Drop" (`held_since`) | [`0x758de9…26e6`](https://starkscan.co/tx/0x758de909a13df099cd72a1ef843217805d04ab761ab57e2bcd4c0f924c126e6) |
-| 5 | `claim_with_prova_pass` — cross-wallet claim | [`0x5ebf46…9dce`](https://starkscan.co/tx/0x5ebf464f06bfe864f2ee875a4b8a84ab8032b31ced539300424067ae14f9dce) |
-| 6 | `create_campaign` — "STRK Holder Badge" (`balance_threshold`) | [`0x41c168…e9b3`](https://starkscan.co/tx/0x41c16869dcd1f3781e839f44b9ea86b867d872f4177e7790fee631d957de9b3) |
-| 7 | `create_campaign` — "Active Depositor" (`deposit_count`) | [`0x12aa67…4496`](https://starkscan.co/tx/0x12aa67bcb97507d402cbe8a7308fd9a6c7ad3a9088227e4a35ad96603284496) |
-| 8 | `transfer` — fund `ProvaPass` with 1 real STRK | [`0x76eeb4…7625`](https://starkscan.co/tx/0x76eeb4941bda080592816c3c51ca92da65c20de18c48e7d4782e90010927625) |
-| 9 | `create_campaign` — "STRK Welcome Reward" (`balance_threshold`, `reward_token`) | [`0x1a64f5…32c0`](https://starkscan.co/tx/0x1a64f5d8963b89118464d4613511b7f65eeb8ffb12f52df887e25404e5b32c0) |
-| 10 | `claim_with_prova_pass` — **real 0.05 STRK payout**, verified `0 → 50000000000000000` wei | [`0x45f6b0…14c`](https://starkscan.co/tx/0x45f6b0d60d1ef2b232885a416f562c16aea15365ea215efdd0db10c4da514c) |
+| 1 | `deploy_account`: operating account | [`0x266ff3…c010`](https://starkscan.co/tx/0x266ff30feda87e59c13eeccf122af1d82aaf92088d95cf7dcbff91f44c3c010) |
+| 2 | `declare`: ProvaPass class | [`0x1d57d6…1153`](https://starkscan.co/tx/0x1d57d647ff240ff4c02d9fb255bbaf80bc5238f8091483f33505c0ca3011153) |
+| 3 | `deploy`: ProvaPass instance | [`0x79375d…c70a`](https://starkscan.co/tx/0x79375d773a91d5726a9bf896e114bc7549003f05c7decd685a0bce5b47dc70a) |
+| 4 | `create_campaign`: STRK Loyalty Drop | [`0x758de9…26e6`](https://starkscan.co/tx/0x758de909a13df099cd72a1ef843217805d04ab761ab57e2bcd4c0f924c126e6) |
+| 5 | `claim_with_prova_pass`: claim from a different wallet | [`0x5ebf46…9dce`](https://starkscan.co/tx/0x5ebf464f06bfe864f2ee875a4b8a84ab8032b31ced539300424067ae14f9dce) |
+| 6 | `create_campaign`: STRK Holder Badge | [`0x41c168…e9b3`](https://starkscan.co/tx/0x41c16869dcd1f3781e839f44b9ea86b867d872f4177e7790fee631d957de9b3) |
+| 7 | `create_campaign`: Active Depositor | [`0x12aa67…4496`](https://starkscan.co/tx/0x12aa67bcb97507d402cbe8a7308fd9a6c7ad3a9088227e4a35ad96603284496) |
+| 8 | STRK `transfer`: fund ProvaPass with 1 STRK | [`0x76eeb4…7625`](https://starkscan.co/tx/0x76eeb4941bda080592816c3c51ca92da65c20de18c48e7d4782e90010927625) |
+| 9 | `create_campaign`: STRK Welcome Reward | [`0x1a64f5…32c0`](https://starkscan.co/tx/0x1a64f5d8963b89118464d4613511b7f65eeb8ffb12f52df887e25404e5b32c0) |
+| 10 | `claim_with_prova_pass`: 0.05 STRK payout to a brand-new address | [`0x45f6b0…514c`](https://starkscan.co/tx/0x45f6b0d60d1ef2b232885a416f562c16aea15365ea215efdd0db10c4da514c) |
+| 11 | `create_campaign`: Capability Smoke Test | [`0x4e09d6…ffee`](https://starkscan.co/tx/0x4e09d659241d884664dcd3d7e12c4815463fd2b4242a51c9d13f7bc87a8ffee) |
 
-Transaction 10's recipient (`0x4fdf9023…eb401f`) was a freshly generated
-address with zero prior chain history — its STRK balance was verified `0`
-before the claim and exactly `50000000000000000` wei (0.05 STRK) after,
-in the same transaction that consumed the nullifier. That claim was
-operator-attested via `mainnet-admin.mjs` to verify the payout mechanism
-end-to-end with real funds — the mechanism itself
-(`IERC20.transfer(recipient, reward_amount)` inside
-`claim_with_prova_pass`, gated only by `reward_amount > 0`) is live and
-general, exercised identically by any real user going through the
-deployed app's `/api/pass` → `/api/claim` flow. See `STATUS.md` for the
-full verification trail.
+Transaction 10 was triggered by the operator through `mainnet-admin.mjs` to test the payout end to end. The recipient's STRK balance went from `0` to `50000000000000000` wei (0.05 STRK).
 
-**Note on scope:** transactions 1–7, 9, and 10 are against `ProvaPass`, the
-contract this project built on top of the pool's public deposit events;
-transaction 8 is a plain ERC20 `transfer` on the STRK token contract, used
-to fund `ProvaPass`. **None of these ten are direct calls into the STRK20
-pool contract itself** — that's a separate transaction, below. Provah's own
-backend reads the pool's public `Deposit` events; it does not write to the
-pool. This isn't for lack of trying the app-side route: see "The attester
-today" above and `STATUS.md` for a real, on-chain-confirmed attempt — a
-hand-built `apply_actions` call for the pool's least-restrictive action
-(registering a viewing key, which needs no screening) reached the live
-contract and reverted with its own `EMPTY_PROOF_FACTS` error, proving that
-every pool state-change an app submits *directly*, not just deposits, is
-gated on a mainnet transaction-prover output with no published endpoint.
-We asked directly (issue #147) and got no answer before this submission.
+</details>
 
-### Real STRK20 pool transactions (4, direct, separate from ProvaPass)
+<details>
+<summary><b>Direct STRK20 pool transactions (4)</b></summary>
 
-The app-side route above is blocked, but it isn't the only route: the
-hackathon's own docs describe a second one, where a privacy-enabled
-wallet reaches the prover on the user's behalf instead — see
-`STATUS.md`'s "The Wallet API route, and why it's the one that worked" for the full
-mechanics and why Provah's own tooling can't drive it headlessly. The
-team completed four such transactions directly against the live pool
-contract, all via the same wallet and route:
+These four pool transactions were made by a person using a privacy-enabled wallet through the wallet-mediated route, not by Prova's backend. Each was checked with `scripts/mainnet-admin.mjs tx-status <hash>`: the pool contract emits `Deposit` (10 STRK) and `EncNoteCreated`, and the first one also emits `ViewingKeySet`.
 
-[`0x0684bdad…fc385`](https://voyager.online/tx/0x0684bdad671fb81afe3cc2c27038e867e352e3323f666e4fd967e0086fffc385) —
-block 13929673, `ACCEPTED_ON_L1`, `SUCCEEDED`. A viewing-key registration
-and 10 STRK shield ("enable private tokens"), verified independently by
-this repo's own `tx-status` diagnostic
-(`scripts/mainnet-admin.mjs tx-status <hash>`) rather than taken on the
-hash's word: the pool contract itself is the emitter of `ViewingKeySet`,
-`Deposit` (10 STRK), and `EncNoteCreated` events, each selector matched by
-independently computing `starknet_keccak` over the event names — the exact
-three-event pattern the hackathon docs and a real reference implementation
-describe for a genuine wallet-mediated shield.
+- [`0x0684bdad…fc385`](https://voyager.online/tx/0x0684bdad671fb81afe3cc2c27038e867e352e3323f666e4fd967e0086fffc385): block 13929673, viewing-key registration plus a 10 STRK shield
+- [`0x0043faa1…7adb6`](https://voyager.online/tx/0x0043faa1484457b0e5b97b860c5b9e1fdc6a5711dece60554bc8149b0b27adb6): block 13955923
+- [`0x0613601d…04421`](https://voyager.online/tx/0x0613601df1f0057935ada6df4657962f853ba2b023e733886e2d3a5c95504421): block 13955965
+- [`0x003c4835…dd9473`](https://voyager.online/tx/0x003c48357164e2536e57798787e9710b8025bdd4a083d10a5af2447e6fdd9473): block 13956048
 
-Three more shields followed the same route, each independently verified
-the same way — pool contract as event emitter, `Deposit` (10 STRK) and
-`EncNoteCreated`, `ACCEPTED_ON_L2`/`SUCCEEDED`:
-[`0x0043faa1…7adb6`](https://voyager.online/tx/0x0043faa1484457b0e5b97b860c5b9e1fdc6a5711dece60554bc8149b0b27adb6) (block 13955923),
-[`0x0613601d…04421`](https://voyager.online/tx/0x0613601df1f0057935ada6df4657962f853ba2b023e733886e2d3a5c95504421) (block 13955965), and
-[`0x003c4835…dd9473`](https://voyager.online/tx/0x003c48357164e2536e57798787e9710b8025bdd4a083d10a5af2447e6fdd9473) (block 13956048).
-Full detail — selector hashes, the registered address, and an honest note
-about an additional undecoded relay in each of these three calls — is in
-`STATUS.md` and [`strk20.json`](strk20.json)'s `strk20_pool_transactions`.
+Selector hashes and a note about an extra relay call that couldn't be decoded are in [`STATUS.md`](STATUS.md).
 
-These four transactions are real and direct; they do not change the
-app-side conclusion above. Provah's backend still cannot submit pool
-transactions without the unpublished prover URL — these were completed by
-a human through a real wallet, which is exactly the route the docs
-describe for this situation, not a workaround.
+</details>
 
-## License
+## License and credits
 
-MIT — see [`LICENSE`](LICENSE). Vendored `starknet-privacy` packages under
-`vendor/` are StarkWare's own code, Apache-2.0, with their original
-`LICENSE` preserved in each package directory.
+Prova Pass is released under the MIT license; see [`LICENSE`](LICENSE).
+
+The vendored packages under [`vendor/`](vendor) are StarkWare's `starknet-privacy` SDK and client. Each package keeps its own `LICENSE` file, which is Apache-2.0. Note that the `package.json` of each says `ISC`.
+
+The STRK20 privacy pool is StarkWare's contract; Prova Pass only reads its public events.
